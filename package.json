@@ -4,6 +4,7 @@
     },
     "dependencies": {
         "@airtable/blocks": "1.8.0",
+        "@headlessui/react": "^1.6.6",
         "react": "^16.9.0",
         "react-dom": "^16.9.0"
     },
