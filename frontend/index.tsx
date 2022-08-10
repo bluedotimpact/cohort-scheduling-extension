@@ -29,7 +29,7 @@ function MyTabLink({ icon, label }) {
 
 function App() {
   return (
-    <Tab.Group defaultIndex={1}>
+    <Tab.Group>
       <Tab.List className="h-8 p-1 w-full flex items-center bg-slate-500">
         <MyTabLink icon="shapes" label="Algorithm" />
         <MyTabLink icon="show1" label="View" />
