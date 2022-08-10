@@ -1,9 +1,10 @@
-import {initializeBlock} from '@airtable/blocks/ui';
-import React from 'react';
+import { initializeBlock, loadScriptFromURLAsync } from "@airtable/blocks/ui";
+import React from "react";
 
-function HelloWorldTypescriptApp() {
-    // YOUR CODE GOES HERE
-    return <div>Hello world 🚀</div>;
+function App() {
+  return <div className="text-green-800">Hello world 🚀</div>;
 }
 
-initializeBlock(() => <HelloWorldTypescriptApp />);
+loadScriptFromURLAsync("https://cdn.tailwindcss.com").then(() => {
+  initializeBlock(() => <App />);
+});
