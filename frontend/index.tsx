@@ -8,6 +8,7 @@ import {
   Input,
   loadScriptFromURLAsync,
   Select,
+  useGlobalConfig,
   useSynced
 } from "@airtable/blocks/ui";
 import { Tab } from "@headlessui/react";
@@ -124,30 +125,91 @@ function MyTabLink({ icon, label }) {
 }
 
 function App() {
+  const globalConfig = useGlobalConfig();
+  const selectedPreset = globalConfig.get("selectedPreset") as string;
+  const preset = globalConfig.get([
+    "presets",
+    selectedPreset as string,
+  ]) as Preset;
+
+  const [editPresetDialogOpen, setEditPresetDialogOpen] = useState(false);
+  const [newPresetName, setNewPresetName] = useState(preset?.name);
+  const closeEditPresetDialog = () => {
+    setEditPresetDialogOpen(false);
+    setNewPresetName(preset?.name);
+  };
+
   return (
-    <Tab.Group>
-      <Tab.List className="h-9 p-1 w-full flex items-center justify-between bg-slate-500">
-        <div className="flex items-center">
-          <MyTabLink icon="settings" label="Setup" />
-          <MyTabLink icon="shapes" label="Algorithm" />
-          <MyTabLink icon="show1" label="View" />
-        </div>
-        <div className="text-slate-50">
-          <PresetChooser />
-        </div>
-      </Tab.List>
-      <Tab.Panels className="p-4 bg-slate-50 min-h-screen h-full">
-        <Tab.Panel>
-          <SetupPage />
-        </Tab.Panel>
-        <Tab.Panel>
-          <AlgorithmPage />
-        </Tab.Panel>
-        <Tab.Panel>
-          <ViewPage />
-        </Tab.Panel>
-      </Tab.Panels>
-    </Tab.Group>
+    <>
+      <Tab.Group>
+        <Tab.List className="h-9 p-1 w-full flex items-center justify-between bg-slate-500">
+          <div className="flex items-center">
+            <MyTabLink icon="settings" label="Setup" />
+            <MyTabLink icon="shapes" label="Algorithm" />
+            <MyTabLink icon="show1" label="View" />
+          </div>
+          <div className="flex text-slate-50">
+            <PresetChooser />
+            <Button
+              icon="edit"
+              className="text-gray-400"
+              onClick={() => setEditPresetDialogOpen(true)}
+            ></Button>
+          </div>
+        </Tab.List>
+        <Tab.Panels className="py-4 px-6 bg-slate-50 min-h-screen h-full">
+          <Tab.Panel>
+            <SetupPage />
+          </Tab.Panel>
+          <Tab.Panel>
+            <AlgorithmPage />
+          </Tab.Panel>
+          <Tab.Panel>
+            <ViewPage />
+          </Tab.Panel>
+        </Tab.Panels>
+      </Tab.Group>
+      {editPresetDialogOpen && (
+        <Dialog onClose={closeEditPresetDialog} width="320px">
+          <Dialog.CloseButton />
+          <div className="flex">
+            <Heading>Edit preset</Heading>
+            <div className="w-2" />
+            <Button
+              icon="trash"
+              onClick={async () => {
+                closeEditPresetDialog();
+                await globalConfig.setAsync(
+                  ["presets", selectedPreset as string],
+                  undefined
+                );
+                await globalConfig.setAsync("selectedPreset", undefined);
+              }}
+            ></Button>
+          </div>
+          <FormField label="Name">
+            <Input
+              autoFocus={true}
+              value={newPresetName}
+              onChange={(e) => setNewPresetName(e.target.value)}
+            />
+          </FormField>
+          <div className="flex w-full justify-end">
+            <Button
+              onClick={() => {
+                closeEditPresetDialog();
+                globalConfig.setAsync(
+                  ["presets", selectedPreset as string, "name"],
+                  newPresetName
+                );
+              }}
+            >
+              Save
+            </Button>
+          </div>
+        </Dialog>
+      )}
+    </>
   );
 }
 
