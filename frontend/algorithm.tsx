@@ -20,7 +20,7 @@ import React, { useMemo, useState } from "react";
 import { MS_IN_MINUTE, MS_IN_WEEK } from "../lib/constants";
 import { thisMonday } from "../lib/date";
 import { renderDuration } from "../lib/format";
-import { newUID } from "../lib/util";
+import { newUID, parseCommaSeparatedNumberList } from "../lib/util";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { FixedNumberInput } from "./components/FixedNumberInput";
 
@@ -115,7 +115,8 @@ type PersonType = {
   sourceTable?: string;
   sourceView?: string;
   timeAvField?: string;
-  howMany?: number;
+  howManyTypePerCohort?: number[];
+  howManyCohortsPerType?: number | string;
   canBeUnused?: boolean;
 };
 
@@ -139,7 +140,18 @@ const PersonTypeComp = (props) => {
     boolean
   ];
 
-  const [howMany, setHowMany] = useState(personType.howMany || 0);
+  const lowercaseName = useMemo(
+    () => personType.name.toLowerCase(),
+    [personType]
+  );
+
+  const [howManyTypePerCohort, setHowManyTypePerCohort] = useState(
+    personType.howManyTypePerCohort
+      ? personType.howManyTypePerCohort.join(", ")
+      : ""
+  );
+
+  const [howManyCohortPerType, setHowManyCohortPerType] = [null, null];
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(
     personType.name === "" ? true : false
@@ -148,6 +160,10 @@ const PersonTypeComp = (props) => {
   const base = useBase();
   const sourceTable = base.getTableByIdIfExists(
     globalConfig.get([...path, "sourceTable"]) as string
+  );
+
+  const sourceView = sourceTable.getViewByIdIfExists(
+    globalConfig.get([...path, "sourceView"]) as string
   );
 
   const cohortsTable = base.getTableByIdIfExists(
@@ -162,17 +178,11 @@ const PersonTypeComp = (props) => {
         <div className="flex items-center w-56">
           <div>
             <div className="text-slate-700 font-semibold">
-              {personType.name} {`(${personType.howMany} per cohort)`}
+              {personType.name}
             </div>
             {sourceTable && (
               <div className="text-[11px] text-slate-400">
-                {sourceTable.name}{" "}
-                {globalConfig.get([...path, "sourceView"]) &&
-                  `(${
-                    sourceTable.getViewByIdIfExists(
-                      globalConfig.get([...path, "sourceView"]) as string
-                    ).name
-                  })`}
+                {sourceTable.name} {sourceView && `(${sourceView?.name})`}
               </div>
             )}
           </div>
@@ -184,13 +194,7 @@ const PersonTypeComp = (props) => {
           <FieldPickerSynced
             table={cohortsTable}
             placeholder="Pick a cohorts table linked reference field..."
-            globalConfigKey={[
-              "presets",
-              selectedPreset,
-              "typesOfPeople",
-              props.personTypeId,
-              "cohortsTableField",
-            ]}
+            globalConfigKey={[...path, "cohortsTableField"]}
             width="300px"
           />
         </div>
@@ -247,34 +251,84 @@ const PersonTypeComp = (props) => {
             <FormField label="Name (just for bookkeeping purposes)">
               <InputSynced globalConfigKey={[...path, "name"]}></InputSynced>
             </FormField>
-            <FormField label="How many in cohort">
+            <FormField
+              label={`How many ${lowercaseName}s per cohort (comma-separated list, e.g. "3, 4")`}
+            >
               <div className="flex w-full space-x-3">
                 <Input
-                  type="number"
-                  className="w-20"
-                  value={howMany + ""}
+                  type="text"
+                  className="w-32"
+                  value={howManyTypePerCohort}
                   onChange={(e) => {
-                    const n = parseInt(e.target.value);
-                    setHowMany(n);
-                    setPersonType({ ...personType, howMany: n });
+                    if (parseCommaSeparatedNumberList(e.target.value))
+                      setHowManyTypePerCohort(e.target.value);
                   }}
                   onBlur={(e) => {
-                    const n = parseInt(e.target.value);
-                    if (n >= 1) {
-                      setPersonType({ ...personType, howMany: n });
+                    const typePerCohort = parseCommaSeparatedNumberList(
+                      e.target.value
+                    );
+                    console.log(typePerCohort);
+
+                    if (typePerCohort) {
+                      setPersonType({
+                        ...personType,
+                        howManyTypePerCohort: typePerCohort,
+                      });
+                      setHowManyTypePerCohort(typePerCohort.join(", "));
                     } else {
-                      setHowMany(personType.howMany);
+                      setHowManyTypePerCohort(
+                        personType.howManyTypePerCohort.join(", ")
+                      );
                     }
                   }}
                 />
+              </div>
+            </FormField>
+            <FormField label={`How many cohorts per ${lowercaseName}`}>
+              <div className="flex space-x-2">
                 <Switch
-                  value={personType.canBeUnused}
-                  onChange={(newValue) =>
-                    setPersonType({ ...personType, canBeUnused: newValue })
+                  value={typeof personType.howManyCohortsPerType === "string"}
+                  onChange={() => {
+                    if (typeof personType.howManyCohortsPerType === "number") {
+                      setPersonType({
+                        ...personType,
+                        howManyCohortsPerType: "",
+                      });
+                    } else {
+                      setPersonType({
+                        ...personType,
+                        howManyCohortsPerType: 1,
+                      });
+                    }
+                  }}
+                  label={
+                    typeof personType.howManyCohortsPerType === "number"
+                      ? "Static"
+                      : "Dynamic"
                   }
-                  label={"Can be unused"}
-                  width="150px"
+                  width="110px"
                 />
+                {typeof personType.howManyCohortsPerType === "number" ? (
+                  <Input
+                    type="number"
+                    width="200px"
+                    value={personType.howManyCohortsPerType + ""}
+                    onChange={(e) => {
+                      setPersonType({
+                        ...personType,
+                        howManyCohortsPerType: parseInt(e.target.value),
+                      });
+                    }}
+                  />
+                ) : sourceTable ? (
+                  <FieldPickerSynced
+                    table={sourceTable}
+                    width="200px"
+                    globalConfigKey={[...path, "howManyCohortsPerType"]}
+                  />
+                ) : (
+                  "Need to configure source table first"
+                )}
               </div>
             </FormField>
           </div>
@@ -282,13 +336,21 @@ const PersonTypeComp = (props) => {
           <div className="flex w-full">
             <div className="w-1/3">
               <FormField label="Source table">
-                <TablePickerSynced globalConfigKey={[...path, "sourceTable"]} />
+                <TablePickerSynced
+                  globalConfigKey={[...path, "sourceTable"]}
+                  onChange={() => {
+                    globalConfig.setPathsAsync([
+                      { path: [...path, "sourceView"], value: null },
+                    ]);
+                  }}
+                />
               </FormField>
               {sourceTable && (
                 <FormField label="Source view (optional)">
                   <ViewPickerSynced
                     table={sourceTable}
                     globalConfigKey={[...path, "sourceView"]}
+                    shouldAllowPickingNone={true}
                   />
                 </FormField>
               )}
@@ -314,6 +376,130 @@ const PersonTypeComp = (props) => {
   );
 };
 
+const Settings = () => {
+  const globalConfig = useGlobalConfig();
+  const selectedPreset = globalConfig.get("selectedPreset") as string;
+  const path = ["presets", selectedPreset];
+
+  const [lengthOfMeeting, setLengthOfMeeting] = useSynced([
+    ...path,
+    "lengthOfMeeting",
+  ]);
+
+  const [firstWeek, setFirstWeek] = useSynced([...path, "firstWeek"]);
+
+  const [typesOfPeople, setTypesOfPeople] = useSynced([
+    ...path,
+    "typesOfPeople",
+  ]);
+
+  const base = useBase();
+  const cohortsTable = base.getTableByIdIfExists(
+    globalConfig.get([...path, "cohortsTable"]) as string
+  );
+
+  return (
+    <>
+      <div className="flex w-full">
+        <FormField
+          className="w-1/2"
+          label="Length of meeting (only 30min increments)"
+        >
+          <FixedNumberInput
+            value={lengthOfMeeting}
+            increment={() =>
+              setLengthOfMeeting((lengthOfMeeting as number) + 30)
+            }
+            decrement={() =>
+              setLengthOfMeeting(Math.max((lengthOfMeeting as number) - 30, 30))
+            }
+            render={(l) => renderDuration(l * MS_IN_MINUTE)}
+          />
+        </FormField>
+        <FormField className="w-1/2" label="First week of meetings">
+          <FixedNumberInput
+            value={firstWeek}
+            increment={() => setFirstWeek((firstWeek as number) + MS_IN_WEEK)}
+            decrement={() => setFirstWeek((firstWeek as number) - MS_IN_WEEK)}
+            render={(ms) => "Week of " + new Date(ms).toLocaleDateString()}
+          />
+        </FormField>
+      </div>
+      <div>
+        <FormField label="Cohorts table">
+          <TablePickerSynced
+            globalConfigKey={[...path, "cohortsTable"]}
+            width="300px"
+            onChange={() => {
+              globalConfig.setPathsAsync([
+                { path: [...path, "cohortsView"], value: null },
+                { path: [...path, "cohortsTableStartDateField"], value: null },
+                { path: [...path, "cohortsTableEndDateField"], value: null },
+              ]);
+            }}
+          />
+        </FormField>
+        {cohortsTable && (
+          <div className="flex space-x-2">
+            <FormField label="Cohorts table start date field">
+              <FieldPickerSynced
+                table={cohortsTable}
+                globalConfigKey={[...path, "cohortsTableStartDateField"]}
+                width="300px"
+              />
+            </FormField>
+            <FormField label="Cohorts table end date field">
+              <FieldPickerSynced
+                table={cohortsTable}
+                globalConfigKey={[...path, "cohortsTableEndDateField"]}
+                width="300px"
+              />
+            </FormField>
+          </div>
+        )}
+      </div>
+      <div>
+        <div className="text-md font-semibold text-gray-500">
+          Types of people
+        </div>
+        <div className="pl-1 space-y-1">
+          {Object.keys(typesOfPeople || {}).map((id, index) => (
+            <PersonTypeComp key={index} personTypeId={id} />
+          ))}
+          <Button
+            icon="plus"
+            onClick={() => {
+              setTypesOfPeople({
+                ...((typesOfPeople as {
+                  [key: string]: PersonType;
+                }) || {}),
+                [newUID()]: createPersonType(),
+              });
+            }}
+          >
+            Add new person type
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+const RunningTheAlgorithm = () => {
+  const globalConfig = useGlobalConfig();
+  const selectedPreset = globalConfig.get("selectedPreset") as string;
+  const path = ["presets", selectedPreset];
+  const preset = globalConfig.get([...path]) as Preset;
+
+  // convert the preset into a form good for the algorithm
+  // {lenghtOfMeeting: number, types: [{ howManyPerCohort: number, sourceTable, sourceView, people: [{id: string, timeAv: [], howManyCohorts: number}], }]}
+  return (
+    <div>
+      <Heading>Review your data</Heading>
+    </div>
+  );
+};
+
 const Preset = () => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
@@ -328,29 +514,6 @@ const Preset = () => {
     setEditPresetDialogOpen(false);
     setNewPresetName(preset?.name);
   };
-
-  const [lengthOfMeeting, setLengthOfMeeting] = useSynced([
-    "presets",
-    selectedPreset,
-    "lengthOfMeeting",
-  ]);
-
-  const [firstWeek, setFirstWeek] = useSynced([
-    "presets",
-    selectedPreset,
-    "firstWeek",
-  ]);
-
-  const [typesOfPeople, setTypesOfPeople] = useSynced([
-    "presets",
-    selectedPreset,
-    "typesOfPeople",
-  ]);
-
-  const base = useBase();
-  const cohortsTable = base.getTableByIdIfExists(
-    globalConfig.get(["presets", selectedPreset, "cohortsTable"]) as string
-  );
 
   return (
     <>
@@ -368,110 +531,11 @@ const Preset = () => {
             <div className="h-2" />
             <div className="space-y-2">
               <CollapsibleSection title="Settings" startOpen={true}>
-                <div className="flex w-full">
-                  <FormField
-                    className="w-1/2"
-                    label="Length of meeting (only 30min increments)"
-                  >
-                    <FixedNumberInput
-                      value={lengthOfMeeting}
-                      increment={() =>
-                        setLengthOfMeeting((lengthOfMeeting as number) + 30)
-                      }
-                      decrement={() =>
-                        setLengthOfMeeting(
-                          Math.max((lengthOfMeeting as number) - 30, 30)
-                        )
-                      }
-                      render={(l) => renderDuration(l * MS_IN_MINUTE)}
-                    />
-                  </FormField>
-                  <FormField className="w-1/2" label="First week of meetings">
-                    <FixedNumberInput
-                      value={firstWeek}
-                      increment={() =>
-                        setFirstWeek((firstWeek as number) + MS_IN_WEEK)
-                      }
-                      decrement={() =>
-                        setFirstWeek((firstWeek as number) - MS_IN_WEEK)
-                      }
-                      render={(ms) =>
-                        "Week of " + new Date(ms).toLocaleDateString()
-                      }
-                    />
-                  </FormField>
-                </div>
-                <div>
-                  <FormField label="Cohorts table">
-                    <TablePickerSynced
-                      globalConfigKey={[
-                        "presets",
-                        selectedPreset,
-                        "cohortsTable",
-                      ]}
-                      width="300px"
-                    />
-                  </FormField>
-                  {cohortsTable && (
-                    <div className="flex space-x-2">
-                      <FormField label="Cohorts table start date field">
-                        <FieldPickerSynced
-                          table={cohortsTable}
-                          globalConfigKey={[
-                            "presets",
-                            selectedPreset,
-                            "cohortsTableStartDateField",
-                          ]}
-                          width="300px"
-                        />
-                      </FormField>
-                      <FormField label="Cohorts table end date field">
-                        <FieldPickerSynced
-                          table={cohortsTable}
-                          globalConfigKey={[
-                            "presets",
-                            selectedPreset,
-                            "cohortsTableEndDateField",
-                          ]}
-                          width="300px"
-                        />
-                      </FormField>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-md font-semibold text-gray-500">
-                    Types of people
-                  </div>
-                  <div className="pl-1 space-y-1">
-                    {Object.keys(typesOfPeople || {}).map((id, index) => (
-                      <PersonTypeComp key={index} personTypeId={id} />
-                    ))}
-                    <Button
-                      icon="plus"
-                      onClick={() => {
-                        setTypesOfPeople({
-                          ...((typesOfPeople as {
-                            [key: string]: PersonType;
-                          }) || {}),
-                          [newUID()]: createPersonType(),
-                        });
-                      }}
-                    >
-                      Add new person type
-                    </Button>
-                  </div>
-                </div>
-                <div className="h-3" />
+                <Settings />
               </CollapsibleSection>
+              <div className="h-3" />
               <CollapsibleSection title="Running the algorithm">
-                <pre>
-                  {JSON.stringify(
-                    globalConfig.get(["presets", selectedPreset]),
-                    undefined,
-                    2
-                  )}
-                </pre>
+                <RunningTheAlgorithm />
               </CollapsibleSection>
             </div>
           </div>
@@ -521,7 +585,7 @@ const Preset = () => {
   );
 };
 
-const Algorithm = () => {
+const AlgorithmPage = () => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset");
   return (
@@ -533,4 +597,4 @@ const Algorithm = () => {
   );
 };
 
-export default Algorithm;
+export default AlgorithmPage;

@@ -5,7 +5,7 @@ import {
 } from "@airtable/blocks/ui";
 import { Tab } from "@headlessui/react";
 import React, { Fragment } from "react";
-import Algorithm from "./algorithm";
+import AlgorithmPage from "./algorithm";
 import View from "./view";
 
 function MyTabLink({ icon, label }) {
@@ -36,7 +36,7 @@ function App() {
       </Tab.List>
       <Tab.Panels className="p-4 bg-slate-50 min-h-screen h-full">
         <Tab.Panel>
-          <Algorithm />
+          <AlgorithmPage />
         </Tab.Panel>
         <Tab.Panel>
           <View />
