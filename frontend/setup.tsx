@@ -16,6 +16,7 @@ import {
     ViewPickerSynced
 } from "@airtable/blocks/ui";
 import React, { useMemo, useState } from "react";
+import { Preset } from ".";
 import { MS_IN_MINUTE, MS_IN_WEEK, UNIT_MINUTES } from "../lib/constants";
 import { renderDuration } from "../lib/format";
 import { newUID } from "../lib/util";
@@ -28,7 +29,7 @@ export type PersonType = {
   timeAvField?: string;
   howManyTypePerCohort?: number[];
   howManyCohortsPerType?: number | string;
-  canBeUnused?: boolean;
+  cohortsTableField?: string;
 };
 
 const createPersonType = () => ({
@@ -38,7 +39,6 @@ const createPersonType = () => ({
   timeAvField: "",
   howManyTypePerCohort: [3, 4],
   howManyCohortsPerType: 1,
-  canBeUnused: false,
 });
 
 const PersonTypeComp = (props) => {
@@ -296,6 +296,10 @@ const SetupPage = () => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
+  const preset = globalConfig.get([
+    "presets",
+    selectedPreset as string,
+  ]) as Preset;
 
   const [lengthOfMeeting, setLengthOfMeeting] = useSynced([
     ...path,
@@ -310,6 +314,25 @@ const SetupPage = () => {
   const cohortsTable = base.getTableByIdIfExists(
     globalConfig.get([...path, "cohortsTable"]) as string
   );
+
+  const cohortsTableConfigured =
+    preset.cohortsTable &&
+    preset.cohortsTableStartDateField &&
+    preset.cohortsTableEndDateField;
+
+  const typesOfPeopleConfigured =
+    Object.keys(preset.personTypes).length > 0 &&
+    Object.keys(preset.personTypes).every((personTypeID) => {
+      const personType = preset.personTypes[personTypeID] as PersonType;
+      return (
+        personType.name &&
+        personType.sourceTable &&
+        personType.timeAvField &&
+        personType.howManyTypePerCohort &&
+        personType.howManyCohortsPerType &&
+        personType.cohortsTableField
+      );
+    });
 
   return (
     <>
@@ -328,7 +351,10 @@ const SetupPage = () => {
                 }
                 decrement={() =>
                   setLengthOfMeeting(
-                    Math.max((lengthOfMeeting as number) - UNIT_MINUTES, UNIT_MINUTES)
+                    Math.max(
+                      (lengthOfMeeting as number) - UNIT_MINUTES,
+                      UNIT_MINUTES
+                    )
                   )
                 }
                 render={(l) => renderDuration(l * MS_IN_MINUTE)}
@@ -349,14 +375,20 @@ const SetupPage = () => {
           </div>
         </div>
         <div>
-          <Heading>Cohorts table</Heading>
+          <div className="flex space-x-2 items-center">
+            <Heading>Cohorts table</Heading>
+            {!cohortsTableConfigured && (
+              <span className="text-xs text-gray-500">
+                Please finish configuring the cohorts table
+              </span>
+            )}
+          </div>
           <FormField label="Cohorts table">
             <TablePickerSynced
               globalConfigKey={[...path, "cohortsTable"]}
               width="300px"
               onChange={() => {
                 globalConfig.setPathsAsync([
-                  { path: [...path, "cohortsView"], value: null },
                   {
                     path: [...path, "cohortsTableStartDateField"],
                     value: null,
@@ -386,7 +418,15 @@ const SetupPage = () => {
           )}
         </div>
         <div>
-          <Heading>Types of people</Heading>
+          <div className="flex space-x-2 items-center">
+            <Heading>Types of people</Heading>
+            <div className="text-xs text-gray-500">
+              {Object.keys(preset.personTypes).length === 0
+                ? "Please add at least one person type"
+                : !typesOfPeopleConfigured &&
+                  "Please finish configuring the person types"}
+            </div>
+          </div>
           <div className="pl-1 space-y-1">
             {Object.keys(personTypes || {}).map((id, index) => (
               <PersonTypeComp key={index} personTypeId={id} />

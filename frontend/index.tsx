@@ -25,6 +25,9 @@ export type Preset = {
   lengthOfMeeting: number;
   firstWeek: number;
   personTypes: PersonType[];
+  cohortsTable?: string;
+  cohortsTableStartDateField?: string;
+  cohortsTableEndDateField?: string;
 };
 
 const createPreset = (name: string) => ({
@@ -142,14 +145,37 @@ function App() {
     setNewPresetName(preset?.name);
   };
 
+  const isConfigured =
+    preset.lengthOfMeeting > 0 &&
+    preset.firstWeek > 0 &&
+    preset.cohortsTable &&
+    preset.cohortsTableStartDateField &&
+    preset.cohortsTableEndDateField &&
+    Object.keys(preset.personTypes).length > 0 &&
+    Object.keys(preset.personTypes).every((personTypeID) => {
+      const personType = preset.personTypes[personTypeID] as PersonType;
+      return (
+        personType.name &&
+        personType.sourceTable &&
+        personType.timeAvField &&
+        personType.howManyTypePerCohort &&
+        personType.howManyCohortsPerType &&
+        personType.cohortsTableField
+      );
+    });
+
   return (
     <>
       <Tab.Group>
         <Tab.List className="h-9 p-1 w-full flex items-center justify-between bg-slate-500">
           <div className="flex items-center">
             <MyTabLink icon="settings" label="Setup" />
-            <MyTabLink icon="shapes" label="Algorithm" />
-            <MyTabLink icon="show1" label="View" />
+            {isConfigured && (
+              <>
+                <MyTabLink icon="shapes" label="Algorithm" />
+                <MyTabLink icon="show1" label="View" />
+              </>
+            )}
           </div>
           <div className="flex text-slate-50">
             <PresetChooser />
@@ -164,12 +190,16 @@ function App() {
           <Tab.Panel>
             <SetupPage />
           </Tab.Panel>
-          <Tab.Panel>
-            <AlgorithmPage />
-          </Tab.Panel>
-          <Tab.Panel>
-            <ViewPage />
-          </Tab.Panel>
+          {isConfigured && (
+            <>
+              <Tab.Panel>
+                <AlgorithmPage />
+              </Tab.Panel>
+              <Tab.Panel>
+                <ViewPage />
+              </Tab.Panel>
+            </>
+          )}
         </Tab.Panels>
       </Tab.Group>
       {editPresetDialogOpen && (
