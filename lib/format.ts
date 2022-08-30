@@ -1,3 +1,5 @@
+import { dayMappingInverted } from "./parse";
+
 export function twoDigits(n: number): string {
   const s = `${n}`;
   if (s.length == 1) {
@@ -29,4 +31,8 @@ export function renderDuration(ms: number): string {
 
 export function prettyPrintTime({ hour, minute }) {
   return twoDigits(hour) + ":" + twoDigits(minute);
+}
+
+export function prettyPrintDayTime({ day, hour, minute }) {
+  return dayMappingInverted[day] + prettyPrintTime({ hour, minute });
 }

@@ -6,15 +6,15 @@ const getBinary = (personType, person, t) =>
 const getCohortCount = (t) => `cohortCount-${t}`;
 
 export async function solve({ lengthOfMeeting, personTypes }) {
-  console.log(personTypes);
-
   const glpk = await GLPK();
 
   const options = {
     msglev: glpk.GLP_MSG_ALL,
     presol: true,
     cb: {
-      call: (progress) => console.log(progress),
+      call: (progress) => {
+        console.log("progress", progress);
+      },
       each: 1,
     },
   };
@@ -57,7 +57,11 @@ export async function solve({ lengthOfMeeting, personTypes }) {
           vars: [{ name: u, coef: 1 }],
           bnds: {
             type: glpk.GLP_UP,
-            ub: person.timeAv.some(([b, e]) => b <= t && t < e) ? 1 : 0,
+            ub: person.timeAv.some(
+              ([b, e]) => b <= t && t <= e - lengthOfMeeting
+            )
+              ? 1
+              : 0,
           },
         });
 
@@ -186,7 +190,6 @@ export async function solve({ lengthOfMeeting, personTypes }) {
       }
     }
 
-    console.log(cohorts);
     return cohorts;
   } catch (e) {
     console.log(e);

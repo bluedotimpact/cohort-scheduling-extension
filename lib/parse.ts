@@ -16,6 +16,16 @@ const dayMapping = {
   U: 6,
 };
 
+export const dayMappingInverted = {
+  0: "M",
+  1: "T",
+  2: "W",
+  3: "R",
+  4: "F",
+  5: "S",
+  6: "U"
+}
+
 function parseTime(time) {
   let [hour, minute] = time.split(":");
   return parseInt(hour) + parseInt(minute) / 60;
