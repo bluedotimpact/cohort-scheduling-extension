@@ -8,6 +8,7 @@ import {
 } from "@airtable/blocks/ui";
 import React, { useEffect, useState } from "react";
 import { MINUTE_IN_HOUR, UNIT_MINUTES } from "../lib/constants";
+import { getDateFromCoord } from "../lib/date";
 import { prettyPrintDayTime } from "../lib/format";
 import { parseTimeAvString, unparseNumber } from "../lib/parse";
 import { solve } from "../lib/scheduler";
@@ -197,100 +198,161 @@ const ViewCohort = ({
 
 const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
   const base = useBase();
+  const globalConfig = useGlobalConfig();
+  const selectedPreset = globalConfig.get("selectedPreset") as string;
+  const path = ["presets", selectedPreset];
+  const preset = globalConfig.get([...path]) as Preset;
+
+  const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
 
   const [viewedCohortIndex, setViewedCohortIndex] = useState(null);
 
+  const [isAcceptDialogOpen, setAcceptDialogOpen] = useState(false);
+
   return (
-    <div>
-      <div className="w-full rounded border border-solid border-gray-200 h-72 overflow-auto">
-        <div className="flex bg-slate-100 py-1 font-medium">
-          <div className="w-4">({solution.length})</div>
-          {personTypes.map((personType) => {
-            const avgSize = (personType.min + personType.max) / 2;
+    <>
+      <div>
+        <div className="w-full rounded border border-solid border-gray-200 h-72 overflow-auto">
+          <div className="flex bg-slate-100 py-1 font-medium">
+            <div className="w-4">({solution.length})</div>
+            {personTypes.map((personType) => {
+              const avgSize = (personType.min + personType.max) / 2;
 
-            return (
-              <div
-                key={personType.name}
-                className="text-center"
-                style={{ flex: `${avgSize} 1 0` }}
-              >
-                {personType.name}
-              </div>
-            );
-          })}
-        </div>
-        <div className="w-full bg-white divide-y divide-gray-200">
-          {solution.map((cohort, i) => {
-            return (
-              <div
-                key={i}
-                className="flex items-center p-1 cursor-pointer hover:bg-slate-50 hover:text-gray-600"
-                onClick={() => setViewedCohortIndex(i)}
-              >
-                <div className="w-4 text-center text-xs text-gray-400">
-                  {i + 1}
+              return (
+                <div
+                  key={personType.name}
+                  className="text-center"
+                  style={{ flex: `${avgSize} 1 0` }}
+                >
+                  {personType.name}
                 </div>
-                {Object.keys(cohort.people).map((personTypeName) => {
-                  const personType = personTypes.find(
-                    (pt: PersonType) => pt.name === personTypeName
-                  );
-                  const table = base.getTableByIdIfExists(
-                    personType.sourceTable
-                  );
-                  const source = personType.sourceView
-                    ? table.getViewByIdIfExists(personType.sourceView)
-                    : table;
+              );
+            })}
+          </div>
+          <div className="w-full bg-white divide-y divide-gray-200">
+            {solution.map((cohort, i) => {
+              return (
+                <div
+                  key={i}
+                  className="flex items-center p-1 cursor-pointer hover:bg-slate-50 hover:text-gray-600"
+                  onClick={() => setViewedCohortIndex(i)}
+                >
+                  <div className="w-4 text-center text-xs text-gray-400">
+                    {i + 1}
+                  </div>
+                  {Object.keys(cohort.people).map((personTypeName) => {
+                    const personType = personTypes.find(
+                      (pt: PersonType) => pt.name === personTypeName
+                    );
+                    const table = base.getTableByIdIfExists(
+                      personType.sourceTable
+                    );
+                    const source = personType.sourceView
+                      ? table.getViewByIdIfExists(personType.sourceView)
+                      : table;
 
-                  const avgSize = (personType.min + personType.max) / 2;
-                  return (
-                    <div
-                      key={personType.name}
-                      className="flex space-x-1"
-                      style={{ flex: `${avgSize} 1 0` }}
-                    >
-                      {cohort.people[personTypeName].map((personID) => {
-                        return (
-                          <PersonBlob
-                            key={personID}
-                            name={
-                              personType.people.find(
-                                (person) => person.id === personID
-                              ).name
-                            }
-                          />
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
+                    const avgSize = (personType.min + personType.max) / 2;
+                    return (
+                      <div
+                        key={personType.name}
+                        className="flex space-x-1"
+                        style={{ flex: `${avgSize} 1 0` }}
+                      >
+                        {cohort.people[personTypeName].map((personID) => {
+                          return (
+                            <PersonBlob
+                              key={personID}
+                              name={
+                                personType.people.find(
+                                  (person) => person.id === personID
+                                ).name
+                              }
+                            />
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         </div>
+        <div className="h-4" />
+        <div className="flex justify-between">
+          <div>some text</div>
+          <Button
+            //@ts-ignore
+            type="asdf"
+            icon="link"
+            onClick={() => setAcceptDialogOpen(true)}
+            variant="danger"
+          >
+            Save
+          </Button>
+        </div>
+        {viewedCohortIndex !== null && (
+          <ViewCohort
+            viewedCohortIndex={viewedCohortIndex}
+            setViewedCohortIndex={setViewedCohortIndex}
+            solution={solution}
+            personTypes={personTypes}
+            lengthOfMeeting={lengthOfMeeting}
+          />
+        )}
       </div>
-      <div className="h-4" />
-      <div className="flex justify-between">
-        <div>some text</div>
-        <Button
-          //@ts-ignore
-          type="asdf"
-          icon="link"
-          onClick={() => {}}
-          variant="danger"
+      {isAcceptDialogOpen && (
+        <Dialog
+          onClose={() => {
+            setAcceptDialogOpen(false);
+          }}
+          width="400px"
         >
-          Save
-        </Button>
-      </div>
-      {viewedCohortIndex !== null && (
-        <ViewCohort
-          viewedCohortIndex={viewedCohortIndex}
-          setViewedCohortIndex={setViewedCohortIndex}
-          solution={solution}
-          personTypes={personTypes}
-          lengthOfMeeting={lengthOfMeeting}
-        />
+          <Dialog.CloseButton />
+          {solution.length} records will be created in the cohorts table. Are
+          you sure?
+          <div className="flex w-full justify-end space-x-2">
+            <Button onClick={() => setAcceptDialogOpen(false)}>Cancel</Button>
+            <Button
+              //@ts-ignore
+              type="asdf"
+              variant="danger"
+              onClick={async () => {
+                const records = solution.map((cohort) => {
+                  const start = cohort.time;
+                  const end = cohort.time + lengthOfMeeting;
+                  const fields = {
+                    [preset.cohortsTableStartDateField]: getDateFromCoord(
+                      unparseNumber(start, MINUTE_IN_HOUR / UNIT_MINUTES),
+                      new Date(preset.firstWeek)
+                    ),
+                    [preset.cohortsTableEndDateField]: getDateFromCoord(
+                      unparseNumber(end, MINUTE_IN_HOUR / UNIT_MINUTES),
+                      new Date(preset.firstWeek)
+                    ),
+                  };
+
+                  for (const personTypeID of Object.keys(preset.personTypes)) {
+                    const personType = preset.personTypes[personTypeID];
+                    fields[personType.cohortsTableField] = cohort.people[
+                      personType.name
+                    ].map((id) => ({
+                      id,
+                    }));
+                  }
+                  return { fields };
+                });
+                console.log(records);
+                await cohortsTable.createRecordsAsync(records);
+                setAcceptDialogOpen(false);
+              }}
+            >
+              Confirm
+            </Button>
+          </div>
+        </Dialog>
       )}
-    </div>
+    </>
   );
 };
 

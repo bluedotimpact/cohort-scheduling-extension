@@ -12,3 +12,9 @@ export function thisMonday(date = new Date()) {
 export function dateShiftBy(date: Date, ms: number) {
   return new Date(date.getTime() + ms);
 }
+
+export function getDateFromCoord({ day, hour, minute }, anchorDate): Date {
+  const anchor = thisMonday(anchorDate);
+  const ms = (day * 24 + hour) * 60 * 60 * 1000 + minute * 60 * 1000;
+  return dateShiftBy(anchor, ms);
+}
