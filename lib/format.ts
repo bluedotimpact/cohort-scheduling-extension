@@ -26,3 +26,7 @@ export function renderDuration(ms: number): string {
   const m = minutes % 60;
   return `${h}h:${twoDigits(m)}m`;
 }
+
+export function prettyPrintTime({ hour, minute }) {
+  return twoDigits(hour) + ":" + twoDigits(minute);
+}

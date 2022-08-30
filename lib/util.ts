@@ -15,3 +15,9 @@ export function parseCommaSeparatedNumberList(list: string): number[] | null {
     return result;
   }
 }
+
+export function isWithin(interval, n) {
+  if (interval[0] <= n && n < interval[1]) {
+    return true;
+  }
+}

@@ -16,12 +16,12 @@ import {
     ViewPickerSynced
 } from "@airtable/blocks/ui";
 import React, { useMemo, useState } from "react";
-import { MS_IN_MINUTE, MS_IN_WEEK } from "../lib/constants";
+import { MS_IN_MINUTE, MS_IN_WEEK, UNIT_MINUTES } from "../lib/constants";
 import { renderDuration } from "../lib/format";
 import { newUID } from "../lib/util";
 import { FixedNumberInput } from "./components/FixedNumberInput";
 
-type PersonType = {
+export type PersonType = {
   name: string;
   sourceTable?: string;
   sourceView?: string;
@@ -36,7 +36,8 @@ const createPersonType = () => ({
   sourceTable: "",
   sourceView: "",
   timeAvField: "",
-  howMany: 1,
+  howManyTypePerCohort: [3, 4],
+  howManyCohortsPerType: 1,
   canBeUnused: false,
 });
 
@@ -44,7 +45,7 @@ const PersonTypeComp = (props) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
 
-  const path = ["presets", selectedPreset, "typesOfPeople", props.personTypeId];
+  const path = ["presets", selectedPreset, "personTypes", props.personTypeId];
   const [personType, setPersonType] = useSynced(path) as [
     PersonType,
     (personTypes: PersonType) => void,
@@ -56,12 +57,6 @@ const PersonTypeComp = (props) => {
     [personType]
   );
 
-  const [howManyTypePerCohort, setHowManyTypePerCohort] = useState(
-    personType.howManyTypePerCohort || [3, 4]
-  );
-
-  const [howManyCohortPerType, setHowManyCohortPerType] = [null, null];
-
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(
     personType.name === "" ? true : false
   );
@@ -71,7 +66,7 @@ const PersonTypeComp = (props) => {
     globalConfig.get([...path, "sourceTable"]) as string
   );
 
-  const sourceView = sourceTable.getViewByIdIfExists(
+  const sourceView = sourceTable?.getViewByIdIfExists(
     globalConfig.get([...path, "sourceView"]) as string
   );
 
@@ -167,12 +162,18 @@ const PersonTypeComp = (props) => {
                   <Input
                     type="number"
                     width="80px"
-                    value={howManyTypePerCohort[0] + ""}
+                    value={personType.howManyTypePerCohort[0] + ""}
                     onChange={(e) => {
                       const n = parseInt(e.target.value);
 
-                      if (n <= howManyTypePerCohort[1]) {
-                        setHowManyTypePerCohort([n, howManyTypePerCohort[1]]);
+                      if (n <= personType.howManyTypePerCohort[1]) {
+                        setPersonType({
+                          ...personType,
+                          howManyTypePerCohort: [
+                            n,
+                            personType.howManyTypePerCohort[1],
+                          ],
+                        });
                       }
                     }}
                   />
@@ -182,11 +183,17 @@ const PersonTypeComp = (props) => {
                   <Input
                     type="number"
                     width="80px"
-                    value={howManyTypePerCohort[1] + ""}
+                    value={personType.howManyTypePerCohort[1] + ""}
                     onChange={(e) => {
                       const n = parseInt(e.target.value);
-                      if (n >= howManyTypePerCohort[0]) {
-                        setHowManyTypePerCohort([howManyTypePerCohort[0], n]);
+                      if (n >= personType.howManyTypePerCohort[0]) {
+                        setPersonType({
+                          ...personType,
+                          howManyTypePerCohort: [
+                            personType.howManyTypePerCohort[0],
+                            n,
+                          ],
+                        });
                       }
                     }}
                   />
@@ -297,10 +304,7 @@ const SetupPage = () => {
 
   const [firstWeek, setFirstWeek] = useSynced([...path, "firstWeek"]);
 
-  const [typesOfPeople, setTypesOfPeople] = useSynced([
-    ...path,
-    "typesOfPeople",
-  ]);
+  const [personTypes, setpersonTypes] = useSynced([...path, "personTypes"]);
 
   const base = useBase();
   const cohortsTable = base.getTableByIdIfExists(
@@ -320,11 +324,11 @@ const SetupPage = () => {
               <FixedNumberInput
                 value={lengthOfMeeting}
                 increment={() =>
-                  setLengthOfMeeting((lengthOfMeeting as number) + 30)
+                  setLengthOfMeeting((lengthOfMeeting as number) + UNIT_MINUTES)
                 }
                 decrement={() =>
                   setLengthOfMeeting(
-                    Math.max((lengthOfMeeting as number) - 30, 30)
+                    Math.max((lengthOfMeeting as number) - UNIT_MINUTES, UNIT_MINUTES)
                   )
                 }
                 render={(l) => renderDuration(l * MS_IN_MINUTE)}
@@ -384,14 +388,14 @@ const SetupPage = () => {
         <div>
           <Heading>Types of people</Heading>
           <div className="pl-1 space-y-1">
-            {Object.keys(typesOfPeople || {}).map((id, index) => (
+            {Object.keys(personTypes || {}).map((id, index) => (
               <PersonTypeComp key={index} personTypeId={id} />
             ))}
             <Button
               icon="plus"
               onClick={() => {
-                setTypesOfPeople({
-                  ...((typesOfPeople as {
+                setpersonTypes({
+                  ...((personTypes as {
                     [key: string]: PersonType;
                   }) || {}),
                   [newUID()]: createPersonType(),

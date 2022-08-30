@@ -1,3 +1,4 @@
+import { globalConfig } from "@airtable/blocks";
 import {
   Button,
   Dialog,
@@ -16,19 +17,21 @@ import React, { Fragment, useMemo, useState } from "react";
 import { thisMonday } from "../lib/date";
 import { newUID } from "../lib/util";
 import AlgorithmPage from "./algorithm";
-import SetupPage from "./setup";
+import SetupPage, { PersonType } from "./setup";
 import ViewPage from "./view";
 
 export type Preset = {
   name: string;
   lengthOfMeeting: number;
   firstWeek: number;
+  personTypes: PersonType[];
 };
 
 const createPreset = (name: string) => ({
   name,
   lengthOfMeeting: 90,
   firstWeek: thisMonday().getTime(),
+  personTypes: [],
 });
 
 const PresetChooser = () => {
@@ -213,6 +216,12 @@ function App() {
   );
 }
 
-loadScriptFromURLAsync("https://cdn.tailwindcss.com").then(() => {
+loadScriptFromURLAsync("https://cdn.tailwindcss.com").then(async () => {
+  if (!globalConfig.get("selectedPreset")) {
+    const id = newUID();
+    const newPreset = createPreset("My preset");
+    await globalConfig.setAsync("presets", { [id]: newPreset });
+    await globalConfig.setAsync("selectedPreset", id);
+  }
   initializeBlock(() => <App />);
 });
