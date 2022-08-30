@@ -11,6 +11,7 @@ import { MINUTE_IN_HOUR, UNIT_MINUTES } from "../lib/constants";
 import { prettyPrintDayTime } from "../lib/format";
 import { parseTimeAvString, unparseNumber } from "../lib/parse";
 import { solve } from "../lib/scheduler";
+import { wait } from "../lib/util";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { TimeAvWidgetOverlay } from "./components/TimeAvWidget";
 import { Preset } from "./index";
@@ -28,7 +29,7 @@ const ViewCohort = ({
   viewedCohortIndex,
   setViewedCohortIndex,
   solution,
-  lenghtOfMeeting,
+  lengthOfMeeting,
   personTypes,
 }) => {
   const [hoveredPerson, setHoveredPerson] = useState(null);
@@ -136,7 +137,7 @@ const ViewCohort = ({
           —{" "}
           {prettyPrintDayTime(
             unparseNumber(
-              solution[viewedCohortIndex].time + lenghtOfMeeting,
+              solution[viewedCohortIndex].time + lengthOfMeeting,
               MINUTE_IN_HOUR / UNIT_MINUTES
             )
           )}
@@ -183,7 +184,7 @@ const ViewCohort = ({
           mainTimeAv={[
             [
               solution[viewedCohortIndex].time,
-              solution[viewedCohortIndex].time + lenghtOfMeeting,
+              solution[viewedCohortIndex].time + lengthOfMeeting,
             ],
           ]}
           overlayTimeAv={hoveredPerson?.timeAv || []}
@@ -194,7 +195,7 @@ const ViewCohort = ({
   );
 };
 
-const Solution = ({ solution, personTypes, lenghtOfMeeting }) => {
+const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
   const base = useBase();
 
   const [viewedCohortIndex, setViewedCohortIndex] = useState(null);
@@ -286,7 +287,7 @@ const Solution = ({ solution, personTypes, lenghtOfMeeting }) => {
           setViewedCohortIndex={setViewedCohortIndex}
           solution={solution}
           personTypes={personTypes}
-          lenghtOfMeeting={lenghtOfMeeting}
+          lengthOfMeeting={lengthOfMeeting}
         />
       )}
     </div>
@@ -302,7 +303,7 @@ const AlgorithmPage = () => {
   const base = useBase();
 
   /* convert the preset into a form good for the algorithm
-   { lenghtOfMeeting: number, 
+   { lengthOfMeeting: number, 
     personTypes: [
       { min, max, 
         people: [{ id: string, timeAv: [], howManyCohorts: number }, ...], 
@@ -367,6 +368,45 @@ const AlgorithmPage = () => {
 
   const [solution, setSolution] = useState(null);
   const [solving, setSolving] = useState(false);
+
+  const [checking, setChecking] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const checkSolution = async () => {
+    if (!solution) return;
+    return solution.every((cohort) => {
+      const t = cohort.time;
+
+      return Object.keys(cohort.people).every((personTypeName) => {
+        const personType = grandInput.personTypes.find(
+          (pt) => pt.name === personTypeName
+        );
+
+        return cohort.people[personTypeName].every((personID) => {
+          const timeAv = personType.people.find(
+            (person) => person.id === personID
+          ).timeAv;
+          return timeAv.some(
+            ([b, e]) => b <= t && t <= e - grandInput.lengthOfMeeting
+          );
+        });
+      });
+    });
+  };
+
+  useEffect(() => {
+    if (solution) {
+      setChecking(true);
+      wait(100).then(() =>
+        checkSolution().then((isValid) => {
+          if (isValid) {
+            setChecking(false);
+            setChecked(true);
+          }
+        })
+      );
+    }
+  }, [solution]);
+
   return (
     <div>
       {!grandInput ? (
@@ -396,19 +436,28 @@ const AlgorithmPage = () => {
             })}
           </div>
           <div className="h-4" />
-          <Button
-            //@ts-ignore
-            type="asdf"
-            icon="apps"
-            onClick={async () => {
-              setSolving(true);
-              setSolution(await solve(grandInput));
-              setSolving(false);
-            }}
-            variant="primary"
-          >
-            Run
-          </Button>
+          <div className="flex space-x-2 items-center">
+            <Button
+              //@ts-ignore
+              type="asdf"
+              icon="apps"
+              onClick={async () => {
+                setSolving(true);
+                setSolution(await solve(grandInput));
+                setSolving(false);
+              }}
+              variant="primary"
+            >
+              Run
+            </Button>
+            <div className="text-xs text-gray-400">
+              {checking
+                ? "Checking solution..."
+                : checked
+                ? "Everyone can meet with their cohort!"
+                : ""}
+            </div>
+          </div>
           <div className="h-4" />
           {solving ? (
             <div className="flex w-full justify-center">
@@ -419,7 +468,7 @@ const AlgorithmPage = () => {
               <Solution
                 solution={solution}
                 personTypes={grandInput.personTypes}
-                lenghtOfMeeting={grandInput.lengthOfMeeting}
+                lengthOfMeeting={grandInput.lengthOfMeeting}
               />
             )
           )}
