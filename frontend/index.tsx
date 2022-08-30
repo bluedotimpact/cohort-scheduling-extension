@@ -184,6 +184,24 @@ function App() {
               className="text-gray-400"
               onClick={() => setEditPresetDialogOpen(true)}
             ></Button>
+            {Object.keys(globalConfig.get("presets")).length > 1 && (
+              <Button
+                icon="trash"
+                className="text-gray-400"
+                onClick={async () => {
+                  closeEditPresetDialog();
+                  await globalConfig.setAsync(
+                    "selectedPreset",
+                    Object.keys(globalConfig.get("presets"))[0]
+                  );
+
+                  await globalConfig.setAsync(
+                    ["presets", selectedPreset as string],
+                    undefined
+                  );
+                }}
+              ></Button>
+            )}
           </div>
         </Tab.List>
         <Tab.Panels className="py-4 px-6 bg-slate-50 min-h-screen h-full">
@@ -208,17 +226,6 @@ function App() {
           <div className="flex">
             <Heading>Edit preset</Heading>
             <div className="w-2" />
-            <Button
-              icon="trash"
-              onClick={async () => {
-                closeEditPresetDialog();
-                await globalConfig.setAsync(
-                  ["presets", selectedPreset as string],
-                  undefined
-                );
-                await globalConfig.setAsync("selectedPreset", undefined);
-              }}
-            ></Button>
           </div>
           <FormField label="Name">
             <Input

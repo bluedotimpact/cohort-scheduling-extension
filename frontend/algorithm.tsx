@@ -1,8 +1,15 @@
-import { Button, Dialog, useBase, useGlobalConfig } from "@airtable/blocks/ui";
+import {
+  Button,
+  Dialog,
+  Heading,
+  useBase,
+  useGlobalConfig
+} from "@airtable/blocks/ui";
 import React, { useEffect, useState } from "react";
 import { MINUTE_IN_HOUR, UNIT_MINUTES } from "../lib/constants";
 import { parseTimeAvString, unparseNumber } from "../lib/parse";
 import { solve } from "../lib/scheduler";
+import { CollapsibleSection } from "./components/CollapsibleSection";
 import { TimeAvWidget } from "./components/TimeAvWidget";
 import { Preset } from "./index";
 import { PersonType } from "./setup";
@@ -219,15 +226,39 @@ const AlgorithmPage = () => {
         "Loading..."
       ) : (
         <div>
-          {/* <pre>
-            {JSON.stringify(grandInput, null, 2)}
-          </pre> */}
+          <div>
+            <Heading>Input description</Heading>
+            {grandInput.personTypes.map((personType) => {
+              return (
+                <CollapsibleSection
+                  key={personType.name}
+                  size="xsmall"
+                  title={`${personType.name} (${personType.people.length})`}
+                >
+                  <div className="flex flex-wrap w-full bg-white border p-1 rounded-sm">
+                    {personType.people.map((person) => {
+                      return (
+                        <div className="px-1 py-0.5">
+                          <PersonBlob key={person.name} name={person.name} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CollapsibleSection>
+              );
+            })}
+          </div>
+          <div className="h-4" />
           <Button
+            //@ts-ignore
+            type="asdf"
+            icon="apps"
             onClick={async () => {
               setSolution(await solve(grandInput));
             }}
+            variant="primary"
           >
-            Solve!
+            Run!
           </Button>
           {solution && (
             <Solution

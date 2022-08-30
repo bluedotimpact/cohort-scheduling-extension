@@ -8,7 +8,7 @@ export const CollapsibleSection = (props) => {
       {({ open }) => (
         <div>
           <Disclosure.Button>
-            <Heading as="h2" className="flex text-lg">
+            <Heading size={props.size} className="flex">
               <div className="flex items-center">
                 <Icon
                   name="caret"

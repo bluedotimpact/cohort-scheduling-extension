@@ -94,23 +94,26 @@ const PersonTypeComp = (props) => {
         </div>
         <div className="w-4" />
         <div className="flex items-center w-1/2 space-x-2">
-          <Icon size={16} name="right"></Icon>
+          <div className="text-gray-400">
+            <Icon size={16} name="link1" />
+          </div>
           <FieldPickerSynced
             table={cohortsTable}
             placeholder="Pick a cohorts table linked reference field..."
             globalConfigKey={[...path, "cohortsTableField"]}
-            width="300px"
           />
         </div>
-        <div className="text-gray-400 ml-3">
+        <div className="flex ml-3">
           <Button
+            className="text-gray-600"
             icon="edit"
             onClick={() => setIsEditDialogOpen(true)}
-          ></Button>
+          />
           <Button
+            className="text-gray-600"
             icon="trash"
             onClick={() => setIsTrashDialogOpen(true)}
-          ></Button>
+          />
         </div>
       </div>
       {isTrashDialogOpen && (
@@ -139,149 +142,144 @@ const PersonTypeComp = (props) => {
       {isEditDialogOpen && (
         <Dialog onClose={() => setIsEditDialogOpen(false)}>
           <Dialog.CloseButton />
-          <div className="flex">
-            <Heading>Edit person type</Heading>
-            <div className="w-2" />
-            <Button
-              icon="trash"
-              onClick={async () => {
-                setIsTrashDialogOpen(true);
-                setIsEditDialogOpen(false);
-              }}
-            ></Button>
-          </div>
+          <Heading>Edit person type</Heading>
 
-          <div className="space-y-1 w-1/2">
-            <FormField label="Singular name (just for bookkeeping purposes)">
-              <InputSynced globalConfigKey={[...path, "name"]}></InputSynced>
-            </FormField>
-            <FormField label={`Number of ${lowercaseName}s per one cohort`}>
-              <div className="flex w-full space-x-3">
-                <div>
-                  <span className="pr-1">Min: </span>
-                  <Input
-                    type="number"
-                    width="80px"
-                    value={personType.howManyTypePerCohort[0] + ""}
-                    onChange={(e) => {
-                      const n = parseInt(e.target.value);
-
-                      if (n <= personType.howManyTypePerCohort[1]) {
-                        setPersonType({
-                          ...personType,
-                          howManyTypePerCohort: [
-                            n,
-                            personType.howManyTypePerCohort[1],
-                          ],
-                        });
-                      }
+          <div className="divide-y">
+            <div className="py-2 w-1/2">
+              <FormField label="Singular name (just for bookkeeping purposes)">
+                <InputSynced globalConfigKey={[...path, "name"]}></InputSynced>
+              </FormField>
+            </div>
+            <div className="py-2 flex w-full">
+              <div className="w-1/3">
+                <FormField label="Source table">
+                  <TablePickerSynced
+                    globalConfigKey={[...path, "sourceTable"]}
+                    onChange={() => {
+                      globalConfig.setPathsAsync([
+                        { path: [...path, "sourceView"], value: null },
+                      ]);
                     }}
                   />
-                </div>
-                <div>
-                  <span className="pr-1">Max: </span>
-                  <Input
-                    type="number"
-                    width="80px"
-                    value={personType.howManyTypePerCohort[1] + ""}
-                    onChange={(e) => {
-                      const n = parseInt(e.target.value);
-                      if (n >= personType.howManyTypePerCohort[0]) {
-                        setPersonType({
-                          ...personType,
-                          howManyTypePerCohort: [
-                            personType.howManyTypePerCohort[0],
-                            n,
-                          ],
-                        });
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-            </FormField>
-            <FormField label={`Number of cohorts per one ${lowercaseName}`}>
-              <div className="flex space-x-2">
-                <Switch
-                  value={typeof personType.howManyCohortsPerType === "string"}
-                  onChange={() => {
-                    if (typeof personType.howManyCohortsPerType === "number") {
-                      setPersonType({
-                        ...personType,
-                        howManyCohortsPerType: "",
-                      });
-                    } else {
-                      setPersonType({
-                        ...personType,
-                        howManyCohortsPerType: 1,
-                      });
-                    }
-                  }}
-                  label={
-                    typeof personType.howManyCohortsPerType === "number"
-                      ? "Static"
-                      : "Dynamic"
-                  }
-                  width="110px"
-                />
-                {typeof personType.howManyCohortsPerType === "number" ? (
-                  <Input
-                    type="number"
-                    width="200px"
-                    value={personType.howManyCohortsPerType + ""}
-                    onChange={(e) => {
-                      setPersonType({
-                        ...personType,
-                        howManyCohortsPerType: parseInt(e.target.value),
-                      });
-                    }}
-                  />
-                ) : sourceTable ? (
-                  <FieldPickerSynced
-                    table={sourceTable}
-                    width="200px"
-                    globalConfigKey={[...path, "howManyCohortsPerType"]}
-                  />
-                ) : (
-                  "You need to configure source table first"
+                </FormField>
+                {sourceTable && (
+                  <FormField label="Source view (optional)">
+                    <ViewPickerSynced
+                      table={sourceTable}
+                      globalConfigKey={[...path, "sourceView"]}
+                      shouldAllowPickingNone={true}
+                    />
+                  </FormField>
                 )}
               </div>
-            </FormField>
-          </div>
-          <div className="h-8" />
-          <div className="flex w-full">
-            <div className="w-1/3">
-              <FormField label="Source table">
-                <TablePickerSynced
-                  globalConfigKey={[...path, "sourceTable"]}
-                  onChange={() => {
-                    globalConfig.setPathsAsync([
-                      { path: [...path, "sourceView"], value: null },
-                    ]);
-                  }}
-                />
-              </FormField>
+              <div className="w-4" />
               {sourceTable && (
-                <FormField label="Source view (optional)">
-                  <ViewPickerSynced
-                    table={sourceTable}
-                    globalConfigKey={[...path, "sourceView"]}
-                    shouldAllowPickingNone={true}
-                  />
-                </FormField>
+                <div className="w-1/3">
+                  <FormField label="Time availability field">
+                    <FieldPickerSynced
+                      table={sourceTable}
+                      globalConfigKey={[...path, "timeAvField"]}
+                    />
+                  </FormField>
+                </div>
               )}
             </div>
-            <div className="w-4" />
-            {sourceTable && (
-              <div className="w-1/3">
-                <FormField label="Time availability field">
-                  <FieldPickerSynced
-                    table={sourceTable}
-                    globalConfigKey={[...path, "timeAvField"]}
+            <div className="py-2 ">
+              <FormField label={`Number of ${lowercaseName}s per one cohort`}>
+                <div className="flex w-full space-x-3">
+                  <div>
+                    <span className="pr-1">Min: </span>
+                    <Input
+                      type="number"
+                      width="80px"
+                      value={personType.howManyTypePerCohort[0] + ""}
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value);
+
+                        if (n <= personType.howManyTypePerCohort[1]) {
+                          setPersonType({
+                            ...personType,
+                            howManyTypePerCohort: [
+                              n,
+                              personType.howManyTypePerCohort[1],
+                            ],
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <span className="pr-1">Max: </span>
+                    <Input
+                      type="number"
+                      width="80px"
+                      value={personType.howManyTypePerCohort[1] + ""}
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value);
+                        if (n >= personType.howManyTypePerCohort[0]) {
+                          setPersonType({
+                            ...personType,
+                            howManyTypePerCohort: [
+                              personType.howManyTypePerCohort[0],
+                              n,
+                            ],
+                          });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+              </FormField>
+              <FormField label={`Number of cohorts per one ${lowercaseName}`}>
+                <div className="flex space-x-2">
+                  <Switch
+                    value={typeof personType.howManyCohortsPerType === "string"}
+                    onChange={() => {
+                      if (
+                        typeof personType.howManyCohortsPerType === "number"
+                      ) {
+                        setPersonType({
+                          ...personType,
+                          howManyCohortsPerType: "",
+                        });
+                      } else {
+                        setPersonType({
+                          ...personType,
+                          howManyCohortsPerType: 1,
+                        });
+                      }
+                    }}
+                    label={
+                      typeof personType.howManyCohortsPerType === "number"
+                        ? "Static"
+                        : "Dynamic"
+                    }
+                    width="110px"
                   />
-                </FormField>
-              </div>
-            )}
+                  {typeof personType.howManyCohortsPerType === "number" ? (
+                    <Input
+                      type="number"
+                      width="200px"
+                      value={personType.howManyCohortsPerType + ""}
+                      onChange={(e) => {
+                        setPersonType({
+                          ...personType,
+                          howManyCohortsPerType: parseInt(e.target.value),
+                        });
+                      }}
+                    />
+                  ) : sourceTable ? (
+                    <FieldPickerSynced
+                      table={sourceTable}
+                      width="200px"
+                      globalConfigKey={[...path, "howManyCohortsPerType"]}
+                    />
+                  ) : (
+                    "You need to configure source table first"
+                  )}
+                </div>
+              </FormField>
+            </div>
           </div>
           <div className="w-full flex justify-end">
             <Button onClick={() => setIsEditDialogOpen(false)}>Save</Button>
