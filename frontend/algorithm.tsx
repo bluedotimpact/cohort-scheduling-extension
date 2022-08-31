@@ -208,6 +208,7 @@ const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
   const [viewedCohortIndex, setViewedCohortIndex] = useState(null);
 
   const [isAcceptDialogOpen, setAcceptDialogOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   return (
     <>
@@ -280,7 +281,10 @@ const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
         </div>
         <div className="h-4" />
         <div className="flex justify-between">
-          <div>some text</div>
+          <div className="text-xs text-gray-400">
+            Click on a cohort to view its meeting time and visually check
+            everyone's availability.
+          </div>
           <Button
             //@ts-ignore
             type="asdf"
@@ -309,46 +313,63 @@ const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
           width="400px"
         >
           <Dialog.CloseButton />
-          {solution.length} records will be created in the cohorts table. Are
-          you sure?
-          <div className="flex w-full justify-end space-x-2">
-            <Button onClick={() => setAcceptDialogOpen(false)}>Cancel</Button>
-            <Button
-              //@ts-ignore
-              type="asdf"
-              variant="danger"
-              onClick={async () => {
-                const records = solution.map((cohort) => {
-                  const start = cohort.time;
-                  const end = cohort.time + lengthOfMeeting;
-                  const fields = {
-                    [preset.cohortsTableStartDateField]: getDateFromCoord(
-                      unparseNumber(start, MINUTE_IN_HOUR / UNIT_MINUTES),
-                      new Date(preset.firstWeek)
-                    ),
-                    [preset.cohortsTableEndDateField]: getDateFromCoord(
-                      unparseNumber(end, MINUTE_IN_HOUR / UNIT_MINUTES),
-                      new Date(preset.firstWeek)
-                    ),
-                  };
+          <div className="h-32">
+            {!saving ? (
+              <div className="flex h-full flex-col justify-between">
+                <Heading>Save records?</Heading>
+                {solution.length} records will be created in the cohorts table.
+                Are you sure you want to continue?
+                <div className="flex w-full justify-end space-x-2">
+                  <Button onClick={() => setAcceptDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    //@ts-ignore
+                    type="asdf"
+                    variant="danger"
+                    onClick={async () => {
+                      setSaving(true);
+                      const records = solution.map((cohort) => {
+                        const start = cohort.time;
+                        const end = cohort.time + lengthOfMeeting;
+                        const fields = {
+                          [preset.cohortsTableStartDateField]: getDateFromCoord(
+                            unparseNumber(start, MINUTE_IN_HOUR / UNIT_MINUTES),
+                            new Date(preset.firstWeek)
+                          ),
+                          [preset.cohortsTableEndDateField]: getDateFromCoord(
+                            unparseNumber(end, MINUTE_IN_HOUR / UNIT_MINUTES),
+                            new Date(preset.firstWeek)
+                          ),
+                        };
 
-                  for (const personTypeID of Object.keys(preset.personTypes)) {
-                    const personType = preset.personTypes[personTypeID];
-                    fields[personType.cohortsTableField] = cohort.people[
-                      personType.name
-                    ].map((id) => ({
-                      id,
-                    }));
-                  }
-                  return { fields };
-                });
-                console.log(records);
-                await cohortsTable.createRecordsAsync(records);
-                setAcceptDialogOpen(false);
-              }}
-            >
-              Confirm
-            </Button>
+                        for (const personTypeID of Object.keys(
+                          preset.personTypes
+                        )) {
+                          const personType = preset.personTypes[personTypeID];
+                          fields[personType.cohortsTableField] = cohort.people[
+                            personType.name
+                          ].map((id) => ({
+                            id,
+                          }));
+                        }
+                        return { fields };
+                      });
+                      console.log(records);
+                      await cohortsTable.createRecordsAsync(records);
+                      setSaving(false);
+                      setAcceptDialogOpen(false);
+                    }}
+                  >
+                    Confirm
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full justify-center items-center">
+                <Loader />
+              </div>
+            )}
           </div>
         </Dialog>
       )}
