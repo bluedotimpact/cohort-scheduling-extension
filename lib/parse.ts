@@ -1,4 +1,4 @@
-import { MINUTE_IN_HOUR } from "./constants";
+import { MINUTE_IN_HOUR, UNIT_MINUTES } from "./constants";
 
 //@ts-ignore
 Number.prototype.round = function (places) {
@@ -23,16 +23,23 @@ export const dayMappingInverted = {
   3: "R",
   4: "F",
   5: "S",
-  6: "U"
-}
+  6: "U",
+};
 
 function parseTime(time) {
   let [hour, minute] = time.split(":");
   return parseInt(hour) + parseInt(minute) / 60;
 }
 
+export function parseDayTime(daytime: string) {
+  const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
+
+  const [_, d, t] = daytime.match(/^([MTWRFSU])(\d+:\d+)$/);
+  return (dayMapping[d] * 24 + parseTime(t)) * multiplier;
+}
+
 function parseInterval(interval, multiplier) {
-  const [a, d1, t1, d2, t2] =
+  const [_, d1, t1, d2, t2] =
     interval.match(/(M|T|W|R|F|S|U)(\d+:\d+) (M|T|W|R|F|S|U)(\d+:\d+)/) || [];
 
   let [b, e] = [
@@ -48,14 +55,15 @@ function parseInterval(interval, multiplier) {
   return [b, e];
 }
 
-export function parseTimeAvString(timeAv, { increment }) {
+export function parseTimeAvString(timeAv) {
   if (!timeAv) return null;
-  const multiplier = MINUTE_IN_HOUR / increment;
+  const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
 
   return timeAv.split(", ").map((ts) => parseInterval(ts, multiplier));
 }
 
-export function unparseNumber(n, multiplier) {
+export function unparseNumber(n) {
+  const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
   n = n / multiplier;
   const day = Math.floor(n / 24);
   n -= day * 24;

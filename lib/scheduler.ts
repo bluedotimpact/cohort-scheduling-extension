@@ -6,6 +6,7 @@ const getBinary = (personType, person, t) =>
 const getCohortCount = (t) => `cohortCount-${t}`;
 
 export async function solve({ lengthOfMeeting, personTypes }) {
+  //@ts-ignore
   const glpk = await GLPK();
 
   const options = {

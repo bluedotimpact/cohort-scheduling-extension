@@ -18,3 +18,12 @@ export function getDateFromCoord({ day, hour, minute }, anchorDate): Date {
   const ms = (day * 24 + hour) * 60 * 60 * 1000 + minute * 60 * 1000;
   return dateShiftBy(anchor, ms);
 }
+
+export function dateToCoord(date: Date) {
+  const anchor = thisMonday(date);
+  const ms = date.getTime() - anchor.getTime();
+  const day = Math.floor(ms / (24 * 60 * 60 * 1000));
+  const hour = Math.floor(ms / (60 * 60 * 1000)) % 24;
+  const minute = Math.floor(ms / (60 * 1000)) % 60;
+  return { day, hour, minute };
+}

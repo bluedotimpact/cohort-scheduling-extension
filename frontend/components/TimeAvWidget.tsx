@@ -39,7 +39,7 @@ export function TimeAvWidget({ timeAv, increment }) {
       </div>
       <div className="flex text-xs">
         <div className={"w-" + leftColumnWidth}>
-          {[...Array(24 * multiplier).keys()]
+          {[...Array(24 * multiplier + 1).keys()]
             .filter((value) => {
               return value % labelFreq == 0;
             })
@@ -52,7 +52,7 @@ export function TimeAvWidget({ timeAv, increment }) {
                   }
                 >
                   <div className="-translate-y-2">
-                    {prettyPrintTime(unparseNumber(time, multiplier))}
+                    {prettyPrintTime(unparseNumber(time))}
                   </div>
                 </div>
               );
@@ -111,7 +111,7 @@ export function TimeAvWidgetOverlay({ mainTimeAv, overlayTimeAv, increment }) {
       </div>
       <div className="flex text-xs">
         <div className={"w-" + leftColumnWidth}>
-          {[...Array(24 * multiplier).keys()]
+          {[...Array(24 * multiplier + 1).keys()]
             .filter((value) => {
               return value % labelFreq == 0;
             })
@@ -124,7 +124,7 @@ export function TimeAvWidgetOverlay({ mainTimeAv, overlayTimeAv, increment }) {
                   }
                 >
                   <div className="-translate-y-2">
-                    {prettyPrintTime(unparseNumber(time, multiplier))}
+                    {prettyPrintTime(unparseNumber(time))}
                   </div>
                 </div>
               );

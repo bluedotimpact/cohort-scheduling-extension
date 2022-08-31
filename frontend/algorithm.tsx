@@ -7,196 +7,18 @@ import {
   useGlobalConfig
 } from "@airtable/blocks/ui";
 import React, { useEffect, useState } from "react";
-import { MINUTE_IN_HOUR, UNIT_MINUTES } from "../lib/constants";
+import { UNIT_MINUTES } from "../lib/constants";
 import { getDateFromCoord } from "../lib/date";
-import { prettyPrintDayTime } from "../lib/format";
 import { parseTimeAvString, unparseNumber } from "../lib/parse";
 import { solve } from "../lib/scheduler";
 import { wait } from "../lib/util";
+import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
-import { TimeAvWidgetOverlay } from "./components/TimeAvWidget";
 import { Preset } from "./index";
 import { PersonType } from "./setup";
+import { ViewCohort } from "./view";
 
-const PersonBlob = (props) => {
-  return (
-    <div className={"rounded px-1 bg-blue-50 h-5 " + props.className}>
-      {props.name}
-    </div>
-  );
-};
-
-const ViewCohort = ({
-  viewedCohortIndex,
-  setViewedCohortIndex,
-  solution,
-  lengthOfMeeting,
-  personTypes,
-}) => {
-  const [hoveredPerson, setHoveredPerson] = useState(null);
-
-  const goToNextCohort = () => {
-    const newIndex = Math.min(solution.length - 1, viewedCohortIndex + 1);
-    if (newIndex !== viewedCohortIndex) setHoveredPerson(null);
-    setViewedCohortIndex(newIndex);
-  };
-
-  const goToPreviousCohort = () => {
-    const newIndex = Math.max(0, viewedCohortIndex - 1);
-    if (newIndex !== viewedCohortIndex) setHoveredPerson(null);
-    setViewedCohortIndex(newIndex);
-  };
-
-  const allPeople = Object.keys(solution[viewedCohortIndex].people).reduce(
-    (acc, personTypeName) => {
-      const personType = personTypes.find(
-        (personType) => personType.name === personTypeName
-      );
-      const people = solution[viewedCohortIndex].people[personTypeName].map(
-        (personID) => personType.people.find((person) => person.id === personID)
-      );
-      return [...acc, ...people];
-    },
-    []
-  );
-
-  useEffect(() => {
-    const f = (e) => {
-      if (viewedCohortIndex !== null) {
-        // if any arrow key
-        if (
-          e.keyCode == 38 ||
-          e.keyCode == 40 ||
-          e.keyCode == 37 ||
-          e.keyCode == 39
-        ) {
-          e.preventDefault();
-          // if arrow down
-          if (e.keyCode === 40) {
-            goToNextCohort();
-          }
-          // if arrow up
-          if (e.keyCode === 38) {
-            goToPreviousCohort();
-          }
-          // if arrow right
-          if (e.keyCode === 39) {
-            if (!hoveredPerson) {
-              setHoveredPerson(allPeople[0]);
-            } else {
-              const index = allPeople.indexOf(hoveredPerson);
-              if (index < allPeople.length - 1) {
-                setHoveredPerson(allPeople[index + 1]);
-              }
-            }
-          }
-          // if arrow left
-          if (e.keyCode === 37) {
-            if (!hoveredPerson) {
-              setHoveredPerson(allPeople[allPeople.length - 1]);
-            } else {
-              const index = allPeople.indexOf(hoveredPerson);
-              if (index > 0) {
-                setHoveredPerson(allPeople[index - 1]);
-              }
-            }
-          }
-        }
-      }
-    };
-    window.addEventListener("keydown", f);
-    return () => window.removeEventListener("keydown", f);
-  }, [viewedCohortIndex, hoveredPerson]);
-
-  return (
-    <Dialog
-      onClose={() => {
-        setViewedCohortIndex(null);
-      }}
-    >
-      <div className="flex justify-between">
-        <div className="flex space-x-2 items-center">
-          <div className="flex">
-            <Button icon="chevronUp" onClick={goToPreviousCohort} />
-            <Button icon="chevronDown" onClick={goToNextCohort} />
-          </div>
-          <div className="text-gray-400 text-xs">
-            {viewedCohortIndex + 1} / {solution.length}
-          </div>
-        </div>
-        <Dialog.CloseButton />
-      </div>
-      <div className="flex">
-        <div className="w-28 shrink-0 font-semibold">Meeting time:</div>
-        <div>
-          {prettyPrintDayTime(
-            unparseNumber(
-              solution[viewedCohortIndex].time,
-              MINUTE_IN_HOUR / UNIT_MINUTES
-            )
-          )}{" "}
-          —{" "}
-          {prettyPrintDayTime(
-            unparseNumber(
-              solution[viewedCohortIndex].time + lengthOfMeeting,
-              MINUTE_IN_HOUR / UNIT_MINUTES
-            )
-          )}
-        </div>
-      </div>
-      {personTypes.map((personType) => {
-        return (
-          <div className="flex">
-            <div className="w-28 shrink-0 font-semibold">
-              {personType.name}s:
-            </div>
-            <div className="flex flex-wrap">
-              {solution[viewedCohortIndex].people[personType.name].map(
-                (personID) => {
-                  const person = personType.people.find(
-                    (person) => person.id === personID
-                  );
-                  return (
-                    <div
-                      onMouseOver={() => {
-                        setHoveredPerson(person);
-                      }}
-                      className={
-                        "px-1 py-0.5 cursor-default hover:text-slate-500 " +
-                        (hoveredPerson === person ? "text-slate-500" : "")
-                      }
-                    >
-                      <PersonBlob key={personID} name={person.name} />
-                    </div>
-                  );
-                }
-              )}
-            </div>
-          </div>
-        );
-      })}
-      <div>
-        <span className="text-xs text-gray-400">
-          {hoveredPerson
-            ? `Overlaying ${hoveredPerson.name}`
-            : "You can hover over people above to visually check that they can meet with their cohort"}
-        </span>
-        <TimeAvWidgetOverlay
-          mainTimeAv={[
-            [
-              solution[viewedCohortIndex].time,
-              solution[viewedCohortIndex].time + lengthOfMeeting,
-            ],
-          ]}
-          overlayTimeAv={hoveredPerson?.timeAv || []}
-          increment={UNIT_MINUTES}
-        />
-      </div>
-    </Dialog>
-  );
-};
-
-const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
+const Solution = ({ solution, personTypes }) => {
   const base = useBase();
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
@@ -207,6 +29,35 @@ const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
 
   const [viewedCohortIndex, setViewedCohortIndex] = useState(null);
 
+  const goToNextCohort = () => {
+    setViewedCohortIndex(Math.min(solution.length - 1, viewedCohortIndex + 1));
+  };
+
+  const goToPreviousCohort = () => {
+    setViewedCohortIndex(Math.max(0, viewedCohortIndex - 1));
+  };
+
+  useEffect(() => {
+    const f = (e) => {
+      if (viewedCohortIndex !== null) {
+        // if any arrow key
+        if (e.keyCode == 38 || e.keyCode == 40) {
+          e.preventDefault();
+          // if arrow down
+          if (e.keyCode === 40) {
+            goToNextCohort();
+          }
+          // if arrow up
+          if (e.keyCode === 38) {
+            goToPreviousCohort();
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", f);
+    return () => window.removeEventListener("keydown", f);
+  }, [viewedCohortIndex]);
+
   const [isAcceptDialogOpen, setAcceptDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -215,7 +66,6 @@ const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
       <div>
         <div className="w-full rounded border border-solid border-gray-200 h-72 overflow-auto">
           <div className="flex bg-slate-100 py-1 font-medium">
-            <div className="w-4">({solution.length})</div>
             {personTypes.map((personType) => {
               const avgSize = (personType.min + personType.max) / 2;
 
@@ -235,7 +85,7 @@ const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
               return (
                 <div
                   key={i}
-                  className="flex items-center p-1 cursor-pointer hover:bg-slate-50 hover:text-gray-600"
+                  className="flex items-center py-1 cursor-pointer hover:bg-slate-50 hover:text-gray-600"
                   onClick={() => setViewedCohortIndex(i)}
                 >
                   <div className="w-4 text-center text-xs text-gray-400">
@@ -295,16 +145,28 @@ const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
             Save
           </Button>
         </div>
-        {viewedCohortIndex !== null && (
-          <ViewCohort
-            viewedCohortIndex={viewedCohortIndex}
-            setViewedCohortIndex={setViewedCohortIndex}
-            solution={solution}
-            personTypes={personTypes}
-            lengthOfMeeting={lengthOfMeeting}
-          />
-        )}
       </div>
+      {viewedCohortIndex !== null && (
+        <Dialog
+          onClose={() => {
+            setViewedCohortIndex(null);
+          }}
+        >
+          <div className="flex justify-between">
+            <div className="flex space-x-2 items-center">
+              <div className="flex">
+                <Button icon="chevronUp" onClick={goToPreviousCohort} />
+                <Button icon="chevronDown" onClick={goToNextCohort} />
+              </div>
+              <div className="text-gray-400 text-xs">
+                {viewedCohortIndex + 1} / {solution.length}
+              </div>
+            </div>
+            <Dialog.CloseButton />
+          </div>
+          <ViewCohort cohort={solution[viewedCohortIndex]} />
+        </Dialog>
+      )}
       {isAcceptDialogOpen && (
         <Dialog
           onClose={() => {
@@ -331,14 +193,14 @@ const Solution = ({ solution, personTypes, lengthOfMeeting }) => {
                       setSaving(true);
                       const records = solution.map((cohort) => {
                         const start = cohort.time;
-                        const end = cohort.time + lengthOfMeeting;
+                        const end = cohort.time + preset.lengthOfMeeting;
                         const fields = {
                           [preset.cohortsTableStartDateField]: getDateFromCoord(
-                            unparseNumber(start, MINUTE_IN_HOUR / UNIT_MINUTES),
+                            unparseNumber(start),
                             new Date(preset.firstWeek)
                           ),
                           [preset.cohortsTableEndDateField]: getDateFromCoord(
-                            unparseNumber(end, MINUTE_IN_HOUR / UNIT_MINUTES),
+                            unparseNumber(end),
                             new Date(preset.firstWeek)
                           ),
                         };
@@ -426,9 +288,7 @@ const AlgorithmPage = () => {
           ).records.map((r) => ({
             id: r.id,
             name: r.getCellValue(table.primaryField.id),
-            timeAv: parseTimeAvString(r.getCellValue(personType.timeAvField), {
-              increment: UNIT_MINUTES,
-            }),
+            timeAv: parseTimeAvString(r.getCellValue(personType.timeAvField)),
             howManyCohorts:
               typeof personType.howManyCohortsPerType === "string"
                 ? r.getCellValue(personType.howManyCohortsPerType)
