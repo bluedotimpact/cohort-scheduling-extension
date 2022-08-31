@@ -193,7 +193,8 @@ const Solution = ({ solution, personTypes }) => {
                       setSaving(true);
                       const records = solution.map((cohort) => {
                         const start = cohort.time;
-                        const end = cohort.time + preset.lengthOfMeeting;
+                        const end =
+                          cohort.time + preset.lengthOfMeeting / UNIT_MINUTES;
                         const fields = {
                           [preset.cohortsTableStartDateField]: getDateFromCoord(
                             unparseNumber(start),
