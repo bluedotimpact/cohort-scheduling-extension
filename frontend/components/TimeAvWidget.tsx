@@ -1,5 +1,5 @@
 import React from "react";
-import { MINUTE_IN_HOUR } from "../../lib/constants";
+import { MINUTE_IN_HOUR, UNIT_MINUTES } from "../../lib/constants";
 import { prettyPrintTime } from "../../lib/format";
 import { unparseNumber } from "../../lib/parse";
 import { isWithin } from "../../lib/util";
@@ -86,8 +86,13 @@ export function TimeAvWidget({ timeAv, increment }) {
     </div>
   );
 }
-export function TimeAvWidgetOverlay({ mainTimeAv, overlayTimeAv, increment }) {
-  const multiplier = MINUTE_IN_HOUR / increment;
+export function TimeAvWidgetOverlay({
+  primaryTimeAv,
+  secondaryTimeAv,
+  primaryClass,
+  secondaryClass,
+}) {
+  const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
 
   const allNumbers = [...Array(7 * 24 * multiplier).keys()];
 
@@ -136,10 +141,10 @@ export function TimeAvWidgetOverlay({ mainTimeAv, overlayTimeAv, increment }) {
             style={{ "grid-template-rows": "repeat(48, minmax(0, 1fr))" }}
           >
             {allNumbers.map((number, i) => {
-              const isMain = mainTimeAv?.some((interval) =>
+              const isPrimary = primaryTimeAv?.some((interval) =>
                 isWithin(interval, number)
               );
-              const isOverlay = overlayTimeAv?.some((interval) =>
+              const isSecondary = secondaryTimeAv?.some((interval) =>
                 isWithin(interval, number)
               );
               const isEven = Math.floor(number) % labelFreq == 0;
@@ -147,12 +152,16 @@ export function TimeAvWidgetOverlay({ mainTimeAv, overlayTimeAv, increment }) {
                 <div
                   className={
                     "h-2 relative border-r border-b border-gray-800 border-r-solid " +
-                    (isMain ? "bg-green-500" : "bg-red-50")
+                    (isPrimary ? primaryClass : "bg-red-50")
                   }
                   style={{ borderBottomStyle: isEven ? "dotted" : "solid" }}
                 >
-                  {isOverlay && (
-                    <div className="absolute inset-0 w-full h-full bg-purple-300 opacity-50" />
+                  {isSecondary && (
+                    <div
+                      className={
+                        "absolute inset-0 w-full h-full " + secondaryClass
+                      }
+                    />
                   )}
                 </div>
               );

@@ -20,6 +20,141 @@ import { CohortBlob, PersonBlob } from "./components/Blobs";
 import { TimeAvWidgetOverlay } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
 
+const ViewPerson = ({ tableId, recordId }) => {
+  const globalConfig = useGlobalConfig();
+  const selectedPreset = globalConfig.get("selectedPreset") as string;
+  const path = ["presets", selectedPreset];
+  const preset = globalConfig.get([...path]) as Preset;
+
+  const base = useBase();
+
+  const table = base.getTableByIdIfExists(tableId);
+  const record = useRecordById(table, recordId);
+
+  const personTypeId = Object.keys(preset.personTypes).find((id) => {
+    const personType = preset.personTypes[id];
+    return personType.sourceTable === tableId;
+  });
+  const personType = preset.personTypes[personTypeId] as PersonType;
+
+  const timeAv = record.getCellValue(personType.timeAvField);
+  const parsedTimeAv = parseTimeAvString(timeAv);
+
+  const [overlapType, setOverlapType] = useState<"full" | "partial">("full");
+
+  const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
+
+  const rawCohorts = useRecords(cohortsTable, {
+    fields: [
+      preset.cohortsTableStartDateField,
+      preset.cohortsTableEndDateField,
+    ],
+  });
+  const allCohorts = rawCohorts.map((cohort) => {
+    const meetingDates = [
+      new Date(
+        cohort.getCellValue(preset.cohortsTableStartDateField) as string
+      ),
+      new Date(cohort.getCellValue(preset.cohortsTableEndDateField) as string),
+    ];
+    const timeAv = meetingDates
+      .map(dateToCoord)
+      .map(prettyPrintDayTime)
+      .join(" ");
+    return {
+      id: cohort.id,
+      name: cohort.name,
+      timeAv,
+    };
+  });
+
+  const cohortsFull = allCohorts.filter((cohort) => {
+    const [[mb, me]] = parseTimeAvString(cohort.timeAv);
+    return parsedTimeAv.some(([b, e]) => mb >= b && me <= e);
+  });
+
+  const cohortsPartial = allCohorts.filter((cohort) => {
+    const [[mb, me]] = parseTimeAvString(cohort.timeAv);
+    return parsedTimeAv.some(
+      ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)
+    );
+  });
+
+  const [hoveredCohort, setHoveredCohort] = useState(null);
+
+  if (!timeAv) {
+    return (
+      <div className="text-gray-700">
+        Participant hasn't filled out the time availability form.
+      </div>
+    );
+  } else {
+    return (
+      <div>
+        <Heading>
+          {record.name} ({personType.name})
+        </Heading>
+        <TimeAvWidgetOverlay
+          primaryTimeAv={parseTimeAvString(timeAv)}
+          primaryClass="bg-green-500"
+          secondaryTimeAv={
+            hoveredCohort ? parseTimeAvString(hoveredCohort.timeAv) : []
+          }
+          secondaryClass="bg-purple-400 opacity-70"
+        />
+        <div className="h-4" />
+        <div className="flex items-center space-x-3">
+          <Heading size="small">Overlap with cohorts</Heading>
+          <Switch
+            value={overlapType === "full"}
+            onChange={(value) => setOverlapType(value ? "full" : "partial")}
+            label={overlapType === "full" ? "Full" : "Partial"}
+            width="100px"
+          />
+          {hoveredCohort && (
+            <span className="text-xs text-gray-500">
+              Overlaying cohort {hoveredCohort.name}
+            </span>
+          )}
+        </div>
+        <div className="h-2" />
+        <div className="w-full rounded border border-solid border-gray-200 max-h-72 overflow-auto">
+          <div className="flex bg-slate-100 p-1 font-medium">
+            <div style={{ flex: "4 1 0" }}>Cohort</div>
+            <div style={{ flex: "1 1 0" }}>Meeting time</div>
+          </div>
+          <div className="w-full bg-white divide-y divide-gray-200">
+            {(overlapType === "full" ? cohortsFull : cohortsPartial).map(
+              (cohort) => {
+                return (
+                  <div
+                    className="flex p-1 items-center cursor-pointer hover:bg-slate-50 hover:text-gray-600"
+                    onMouseEnter={() => setHoveredCohort(cohort)}
+                    onMouseLeave={() => setHoveredCohort(null)}
+                  >
+                    <div
+                      className="flex"
+                      style={{ flex: "4 1 0" }}
+                      onClick={() =>
+                        expandRecord(rawCohorts.find((c) => c.id === cohort.id))
+                      }
+                    >
+                      <CohortBlob name={cohort.name} />
+                    </div>
+                    <div style={{ flex: "1 1 0" }}>
+                      {cohort.timeAv.replace(" ", " – ")}
+                    </div>
+                  </div>
+                );
+              }
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+};
+
 export const ViewCohort = ({ cohort }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
@@ -137,124 +272,19 @@ export const ViewCohort = ({ cohort }) => {
             : "You can hover over people above to visually check that they can meet with their cohort"}
         </span>
         <TimeAvWidgetOverlay
-          mainTimeAv={[
+          primaryTimeAv={[
             [cohort.time, cohort.time + preset.lengthOfMeeting / UNIT_MINUTES],
           ]}
-          overlayTimeAv={hoveredPerson?.timeAv || []}
-          increment={UNIT_MINUTES}
+          primaryClass="bg-purple-500"
+          secondaryTimeAv={hoveredPerson?.timeAv || []}
+          secondaryClass="bg-green-500 opacity-30"
         />
       </div>
     </>
   );
 };
 
-const ViewPerson = ({ tableId, recordId }) => {
-  const globalConfig = useGlobalConfig();
-  const selectedPreset = globalConfig.get("selectedPreset") as string;
-  const path = ["presets", selectedPreset];
-  const preset = globalConfig.get([...path]) as Preset;
-
-  const base = useBase();
-
-  const table = base.getTableByIdIfExists(tableId);
-  const record = useRecordById(table, recordId);
-
-  const personTypeId = Object.keys(preset.personTypes).find((id) => {
-    const personType = preset.personTypes[id];
-    return personType.sourceTable === tableId;
-  });
-  const personType = preset.personTypes[personTypeId] as PersonType;
-
-  const timeAv = record.getCellValue(personType.timeAvField);
-  const parsedTimeAv = parseTimeAvString(timeAv);
-
-  const [overlapType, setOverlapType] = useState<"full" | "partial">("full");
-
-  const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
-
-  const rawCohorts = useRecords(cohortsTable, {
-    fields: [
-      preset.cohortsTableStartDateField,
-      preset.cohortsTableEndDateField,
-    ],
-  });
-  const allCohorts = rawCohorts.map((cohort) => {
-    const meetingDates = [
-      new Date(
-        cohort.getCellValue(preset.cohortsTableStartDateField) as string
-      ),
-      new Date(cohort.getCellValue(preset.cohortsTableEndDateField) as string),
-    ];
-    const timeAv = meetingDates
-      .map(dateToCoord)
-      .map(prettyPrintDayTime)
-      .join(" ");
-    return {
-      id: cohort.id,
-      name: cohort.name,
-      timeAv,
-    };
-  });
-
-  const cohortsFull = allCohorts.filter((cohort) => {
-    console.log(cohort.timeAv);
-    const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-    return parsedTimeAv.some(([b, e]) => mb >= b && me <= e);
-  });
-
-  const cohortsPartial = allCohorts.filter((cohort) => {
-    const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-    return parsedTimeAv.some(([b, e]) => mb < e || me > b);
-  });
-
-  if (!timeAv) {
-    return (
-      <div className="text-gray-700">
-        Participant hasn't filled out the time availability form.
-      </div>
-    );
-  } else {
-    return (
-      <div>
-        <Heading>
-          {record.name} ({personType.name})
-        </Heading>
-        <TimeAvWidgetOverlay
-          increment={UNIT_MINUTES}
-          mainTimeAv={parseTimeAvString(timeAv)}
-          overlayTimeAv={[]}
-        />
-        <div className="h-4" />
-        <div className="flex items-center space-x-3">
-          <Heading size="small">Overlap with cohorts</Heading>
-          <Switch
-            value={overlapType === "full"}
-            onChange={(value) => setOverlapType(value ? "full" : "partial")}
-            label={overlapType === "full" ? "Full" : "Partial"}
-            width="100px"
-          />
-        </div>
-        <div>
-          {(overlapType === "full" ? cohortsFull : cohortsPartial).map(
-            (cohort) => {
-              return (
-                <div
-                  onClick={() =>
-                    expandRecord(rawCohorts.find((c) => c.id === cohort.id))
-                  }
-                >
-                  <CohortBlob name={cohort.name} />
-                </div>
-              );
-            }
-          )}
-        </div>
-      </div>
-    );
-  }
-};
-
-const ViewCohortWrapper = ({ tableId, recordId }) => {
+const ViewCohortWrapper = ({ recordId }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
@@ -330,12 +360,7 @@ const ViewPage = () => {
       />
     );
   } else {
-    return (
-      <ViewCohortWrapper
-        tableId={cursor.activeTableId}
-        recordId={cursor.selectedRecordIds[0]}
-      />
-    );
+    return <ViewCohortWrapper recordId={cursor.selectedRecordIds[0]} />;
   }
 };
 
