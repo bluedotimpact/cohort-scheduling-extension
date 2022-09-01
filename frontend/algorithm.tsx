@@ -64,7 +64,7 @@ const Solution = ({ solution, personTypes }) => {
   return (
     <>
       <div>
-        <div className="w-full rounded border border-solid border-gray-200 h-72 overflow-auto">
+        <div className="w-full rounded border border-solid border-gray-200">
           <div className="flex bg-slate-100 py-1 font-medium">
             {personTypes.map((personType) => {
               const avgSize = (personType.min + personType.max) / 2;
@@ -98,9 +98,6 @@ const Solution = ({ solution, personTypes }) => {
                     const table = base.getTableByIdIfExists(
                       personType.sourceTable
                     );
-                    const source = personType.sourceView
-                      ? table.getViewByIdIfExists(personType.sourceView)
-                      : table;
 
                     const avgSize = (personType.min + personType.max) / 2;
                     return (
@@ -124,6 +121,34 @@ const Solution = ({ solution, personTypes }) => {
                       </div>
                     );
                   })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="h-2" />
+        <div>
+          <div className="text-md font-semibold">Unused people</div>
+          <div className="space-y-2">
+            {personTypes.map((personType) => {
+              const usedPeople = solution.reduce((acc, cohort) => {
+                return acc.concat(cohort.people[personType.name]);
+              }, []);
+              const unusedPeople = personType.people.filter(
+                (person) => !usedPeople.includes(person.id)
+              );
+              return (
+                <div className="flex items-center">
+                  <div className="w-24">{personType.name}s:</div>
+                  {unusedPeople.length === 0 ? (
+                    <div>None</div>
+                  ) : (
+                    <div className="flex flex-wrap p-1 w-full bg-white rounded-sm border space-x-1">
+                      {unusedPeople.map((person) => {
+                        return <PersonBlob name={person.name} />;
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -259,48 +284,54 @@ const AlgorithmPage = () => {
    } */
 
   const [grandInput, setGrandInput] = useState(null);
+  const [parsingError, setParsingError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
     const argh = async () => {
-      const personTypes = [];
+      try {
+        const personTypes = [];
 
-      for (const key of Object.keys(preset.personTypes)) {
-        const personType = preset.personTypes[key] as PersonType;
+        for (const key of Object.keys(preset.personTypes)) {
+          const personType = preset.personTypes[key] as PersonType;
 
-        const table = base.getTableByIdIfExists(personType.sourceTable);
-        const source = personType.sourceView
-          ? table.getViewByIdIfExists(personType.sourceView)
-          : table;
+          const table = base.getTableByIdIfExists(personType.sourceTable);
+          const source = personType.sourceView
+            ? table.getViewByIdIfExists(personType.sourceView)
+            : table;
 
-        personTypes.push({
-          name: personType.name,
-          min: personType.howManyTypePerCohort[0],
-          max: personType.howManyTypePerCohort[1],
-          people: (
-            await source.selectRecordsAsync({
-              fields: [
-                table.primaryField.id,
-                personType.timeAvField,
-                typeof personType.howManyCohortsPerType === "string" &&
-                  personType.howManyCohortsPerType,
-              ].filter(Boolean),
-            })
-          ).records.map((r) => ({
-            id: r.id,
-            name: r.getCellValue(table.primaryField.id),
-            timeAv: parseTimeAvString(r.getCellValue(personType.timeAvField)),
-            howManyCohorts:
-              typeof personType.howManyCohortsPerType === "string"
-                ? r.getCellValue(personType.howManyCohortsPerType)
-                : personType.howManyCohortsPerType,
-          })),
+          personTypes.push({
+            name: personType.name,
+            min: personType.howManyTypePerCohort[0],
+            max: personType.howManyTypePerCohort[1],
+            people: (
+              await source.selectRecordsAsync({
+                fields: [
+                  table.primaryField.id,
+                  personType.timeAvField,
+                  typeof personType.howManyCohortsPerType === "string" &&
+                    personType.howManyCohortsPerType,
+                ].filter(Boolean),
+              })
+            ).records.map((r) => ({
+              id: r.id,
+              name: r.getCellValue(table.primaryField.id),
+              timeAv: parseTimeAvString(r.getCellValue(personType.timeAvField)),
+              howManyCohorts:
+                typeof personType.howManyCohortsPerType === "string"
+                  ? r.getCellValue(personType.howManyCohortsPerType)
+                  : personType.howManyCohortsPerType,
+            })),
+          });
+        }
+        setGrandInput({
+          lengthOfMeeting: preset.lengthOfMeeting / UNIT_MINUTES,
+          personTypes,
         });
+      } catch (e) {
+        setParsingError(e);
+        console.log(e);
       }
-      setGrandInput({
-        lengthOfMeeting: preset.lengthOfMeeting / UNIT_MINUTES,
-        personTypes,
-      });
     };
 
     argh();
@@ -311,6 +342,7 @@ const AlgorithmPage = () => {
   }, []);
 
   const [solution, setSolution] = useState(null);
+  const [error, setError] = useState(null);
   const [solving, setSolving] = useState(false);
 
   const [checking, setChecking] = useState(false);
@@ -353,7 +385,11 @@ const AlgorithmPage = () => {
 
   return (
     <div>
-      {!grandInput ? (
+      {parsingError ? (
+        <div>
+          Parsing error: <pre>{JSON.stringify(parsingError, null, 2)}</pre>
+        </div>
+      ) : !grandInput ? (
         "Loading..."
       ) : (
         <div>
@@ -387,7 +423,14 @@ const AlgorithmPage = () => {
               icon="apps"
               onClick={async () => {
                 setSolving(true);
-                setSolution(await solve(grandInput));
+                setError(null);
+                try {
+                  const solution = await solve(grandInput);
+                  setSolution(solution);
+                } catch (e) {
+                  setError(e);
+                  console.log(e);
+                }
                 setSolving(false);
               }}
               variant="primary"
@@ -412,10 +455,10 @@ const AlgorithmPage = () => {
               <Solution
                 solution={solution}
                 personTypes={grandInput.personTypes}
-                lengthOfMeeting={grandInput.lengthOfMeeting}
               />
             )
           )}
+          {error && <div>{JSON.stringify(error, null, 2)}</div>}
         </div>
       )}
     </div>

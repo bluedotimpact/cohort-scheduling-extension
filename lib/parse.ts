@@ -56,7 +56,7 @@ function parseInterval(interval, multiplier) {
 }
 
 export function parseTimeAvString(timeAv) {
-  if (!timeAv) return null;
+  if (!timeAv || timeAv.length === 0) return [];
   const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
 
   return timeAv.split(", ").map((ts) => parseInterval(ts, multiplier));
