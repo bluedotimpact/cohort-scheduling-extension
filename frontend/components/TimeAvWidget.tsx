@@ -88,9 +88,11 @@ export function TimeAvWidget({ timeAv, increment }) {
 }
 export function TimeAvWidgetOverlay({
   primaryTimeAv,
-  secondaryTimeAv,
   primaryClass,
-  secondaryClass,
+  secondaryTimeAv = [],
+  secondaryClass = "",
+  tertiaryTimeAv = [],
+  tertiaryClass = "",
 }) {
   const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
 
@@ -147,6 +149,10 @@ export function TimeAvWidgetOverlay({
               const isSecondary = secondaryTimeAv?.some((interval) =>
                 isWithin(interval, number)
               );
+              const isTertiary = tertiaryTimeAv?.some((interval) =>
+                isWithin(interval, number)
+              );
+
               const isEven = Math.floor(number) % labelFreq == 0;
               return (
                 <div
@@ -160,6 +166,13 @@ export function TimeAvWidgetOverlay({
                     <div
                       className={
                         "absolute inset-0 w-full h-full " + secondaryClass
+                      }
+                    />
+                  )}
+                  {isTertiary && (
+                    <div
+                      className={
+                        "absolute inset-0 w-full h-full " + tertiaryClass
                       }
                     />
                   )}

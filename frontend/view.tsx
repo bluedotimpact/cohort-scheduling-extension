@@ -16,6 +16,7 @@ import { UNIT_MINUTES } from "../lib/constants";
 import { dateToCoord } from "../lib/date";
 import { prettyPrintDayTime } from "../lib/format";
 import { parseDayTime, parseTimeAvString, unparseNumber } from "../lib/parse";
+import { findOverlapGroup } from "../lib/util";
 import { CohortBlob, PersonBlob } from "./components/Blobs";
 import { TimeAvWidgetOverlay } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
@@ -168,6 +169,7 @@ export const ViewCohort = ({ cohort }) => {
     setHoveredPerson(null);
   }, [cohort]);
 
+  const peopleRecords = {};
   const allPeople = Object.keys(cohort.people).reduce((acc, personTypeName) => {
     const personTypeID = Object.keys(preset.personTypes).find(
       (id) => preset.personTypes[id].name === personTypeName
@@ -177,6 +179,7 @@ export const ViewCohort = ({ cohort }) => {
     const table = base.getTableByIdIfExists(personType.sourceTable);
 
     const records = useRecords(table);
+    peopleRecords[personTypeID] = records;
     const people = cohort.people[personTypeName].map((personID) => {
       const person = records.find((person) => person.id === personID);
       //@ts-ignore
@@ -222,6 +225,8 @@ export const ViewCohort = ({ cohort }) => {
     return () => window.removeEventListener("keydown", f);
   }, [hoveredPerson]);
 
+  const wholeOverlap = findOverlapGroup(allPeople.map(({ timeAv }) => timeAv));
+
   return (
     <>
       <div className="flex">
@@ -244,13 +249,16 @@ export const ViewCohort = ({ cohort }) => {
               {cohort.people[personType.name].map((personID) => {
                 const table = base.getTableByIdIfExists(personType.sourceTable);
 
-                const records = useRecords(table);
-
-                const person = records.find((person) => person.id === personID);
+                const person = peopleRecords[personTypeID].find(
+                  (person) => person.id === personID
+                );
                 return (
                   <div
-                    onMouseOver={() => {
+                    onMouseEnter={() => {
                       setHoveredPerson(person);
+                    }}
+                    onMouseLeave={() => {
+                      setHoveredPerson(null);
                     }}
                     className={
                       "px-1 py-0.5 cursor-default hover:text-slate-500 " +
@@ -278,6 +286,8 @@ export const ViewCohort = ({ cohort }) => {
           primaryClass="bg-purple-500"
           secondaryTimeAv={hoveredPerson?.timeAv || []}
           secondaryClass="bg-green-500 opacity-30"
+          tertiaryTimeAv={wholeOverlap}
+          tertiaryClass="bg-purple-500 opacity-30"
         />
       </div>
     </>
