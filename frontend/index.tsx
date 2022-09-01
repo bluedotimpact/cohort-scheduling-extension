@@ -17,6 +17,7 @@ import React, { Fragment, useMemo, useState } from "react";
 import { thisMonday } from "../lib/date";
 import { newUID } from "../lib/util";
 import AlgorithmPage from "./algorithm";
+import OtherPage from "./other";
 import SetupPage, { PersonType } from "./setup";
 import ViewPage from "./view";
 
@@ -174,6 +175,7 @@ function App() {
               <>
                 <MyTabLink icon="shapes" label="Algorithm" />
                 <MyTabLink icon="show1" label="View" />
+                <MyTabLink icon="lightbulb" label="Other"></MyTabLink>
               </>
             )}
           </div>
@@ -215,6 +217,9 @@ function App() {
               </Tab.Panel>
               <Tab.Panel>
                 <ViewPage />
+              </Tab.Panel>
+              <Tab.Panel>
+                <OtherPage />
               </Tab.Panel>
             </>
           )}

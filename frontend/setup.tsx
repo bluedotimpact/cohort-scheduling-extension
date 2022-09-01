@@ -1,19 +1,19 @@
 import {
-    Button,
-    Dialog,
-    FieldPickerSynced,
-    FormField,
-    Heading,
-    Icon,
-    Input,
-    InputSynced,
-    Switch,
-    TablePickerSynced,
-    Text,
-    useBase,
-    useGlobalConfig,
-    useSynced,
-    ViewPickerSynced
+  Button,
+  Dialog,
+  FieldPickerSynced,
+  FormField,
+  Heading,
+  Icon,
+  Input,
+  InputSynced,
+  Switch,
+  TablePickerSynced,
+  Text,
+  useBase,
+  useGlobalConfig,
+  useSynced,
+  ViewPickerSynced
 } from "@airtable/blocks/ui";
 import React, { useMemo, useState } from "react";
 import { Preset } from ".";
@@ -27,6 +27,8 @@ export type PersonType = {
   sourceTable?: string;
   sourceView?: string;
   timeAvField?: string;
+  cohortOverlapFullField?: string;
+  cohortOverlapPartialField?: string;
   howManyTypePerCohort?: number[];
   howManyCohortsPerType?: number | string;
   cohortsTableField?: string;
@@ -151,7 +153,7 @@ const PersonTypeComp = (props) => {
               </FormField>
             </div>
             <div className="py-2 flex w-full">
-              <div className="w-1/3">
+              <div className="w-1/2 pr-4">
                 <FormField label="Source table">
                   <TablePickerSynced
                     globalConfigKey={[...path, "sourceTable"]}
@@ -172,13 +174,24 @@ const PersonTypeComp = (props) => {
                   </FormField>
                 )}
               </div>
-              <div className="w-4" />
               {sourceTable && (
-                <div className="w-1/3">
+                <div className="w-1/2">
                   <FormField label="Time availability field">
                     <FieldPickerSynced
                       table={sourceTable}
                       globalConfigKey={[...path, "timeAvField"]}
+                    />
+                  </FormField>
+                  <FormField label="Cohort full overlap field (optional)">
+                    <FieldPickerSynced
+                      table={sourceTable}
+                      globalConfigKey={[...path, "cohortOverlapFullField"]}
+                    />
+                  </FormField>
+                  <FormField label="Cohort partial overlap field (optional)">
+                    <FieldPickerSynced
+                      table={sourceTable}
+                      globalConfigKey={[...path, "cohortOverlapPartialField"]}
                     />
                   </FormField>
                 </div>
