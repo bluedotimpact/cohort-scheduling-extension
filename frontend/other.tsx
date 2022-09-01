@@ -1,11 +1,11 @@
 import {
-    Button,
-    Heading,
-    Loader,
-    Text,
-    useBase,
-    useGlobalConfig,
-    useRecords
+  Button,
+  Heading,
+  Loader,
+  Text,
+  useBase,
+  useGlobalConfig,
+  useRecords
 } from "@airtable/blocks/ui";
 import React, { useState } from "react";
 import { Preset } from ".";
@@ -58,12 +58,11 @@ const OtherPage = () => {
   const [recalculating, setRecalculating] = useState(false);
   const recalculateOverlap = async () => {
     for (const personType of configuredPersonTypes) {
-      const table = base.getTableByIdIfExists(personType.sourceTable);
-      const source = personType.sourceView
-        ? table.getViewByIdIfExists(personType.sourceView)
-        : table;
+      console.log("updating", personType.name);
 
-      const records = (await source.selectRecordsAsync()).records;
+      const table = base.getTableByIdIfExists(personType.sourceTable);
+
+      const records = (await table.selectRecordsAsync()).records;
       const updatedRecords = [];
       for (const record of records) {
         const parsedTimeAv = parseTimeAvString(
@@ -97,7 +96,10 @@ const OtherPage = () => {
         };
         updatedRecords.push(newRecord);
       }
-      await table.updateRecordsAsync(updatedRecords);
+      const chunkSize = 49;
+      for (let i = 0; i < updatedRecords.length; i += chunkSize) {
+        await table.updateRecordsAsync(updatedRecords.slice(i, i + chunkSize));
+      }
     }
   };
 
