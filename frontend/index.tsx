@@ -25,8 +25,7 @@ export type Preset = {
   name: string;
   lengthOfMeeting: number;
   firstWeek: number;
-  // personTypeID is the numeric index into this array
-  personTypes: PersonType[];
+  personTypes: { [personTypeId: string]: PersonType };
   cohortsTable?: string;
   cohortsTableStartDateField?: string;
   cohortsTableEndDateField?: string;
@@ -135,16 +134,13 @@ function MyTabLink({ icon, label }) {
 function App() {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
-  const preset = globalConfig.get([
-    "presets",
-    selectedPreset as string,
-  ]) as Preset;
+  const preset = globalConfig.get(["presets", selectedPreset]) as Preset;
 
   const [editPresetDialogOpen, setEditPresetDialogOpen] = useState(false);
   const [newPresetName, setNewPresetName] = useState(preset?.name);
   const closeEditPresetDialog = () => {
     setEditPresetDialogOpen(false);
-    setNewPresetName(preset?.name);
+    setNewPresetName(preset.name);
   };
 
   const isConfigured =
@@ -153,17 +149,17 @@ function App() {
     preset.cohortsTable &&
     preset.cohortsTableStartDateField &&
     preset.cohortsTableEndDateField &&
-    preset.personTypes.length > 0 &&
-    preset.personTypes.every((personType) => {
-      return (
+    Object.keys(preset.personTypes).length > 0 &&
+    Object.values(preset.personTypes).every((personType) => (
         personType.name &&
         personType.sourceTable &&
         personType.timeAvField &&
         personType.howManyTypePerCohort &&
         personType.howManyCohortsPerType &&
         personType.cohortsTableField
-      );
-    });
+    ));
+
+  console.error(preset.personTypes)
 
   return (
     <>
@@ -185,6 +181,7 @@ function App() {
               icon="edit"
               className="text-gray-400"
               onClick={() => setEditPresetDialogOpen(true)}
+              aria-label="Edit preset"
             ></Button>
             {Object.keys(globalConfig.get("presets")).length > 1 && (
               <Button
@@ -202,6 +199,7 @@ function App() {
                     undefined
                   );
                 }}
+                aria-label="Delete preset"
               ></Button>
             )}
           </div>

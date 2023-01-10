@@ -110,11 +110,13 @@ const PersonTypeComp = (props) => {
             className="text-gray-600"
             icon="edit"
             onClick={() => setIsEditDialogOpen(true)}
+            aria-label="Edit person type"
           />
           <Button
             className="text-gray-600"
             icon="trash"
             onClick={() => setIsTrashDialogOpen(true)}
+            aria-label="Delete person type"
           />
         </div>
       </div>
@@ -317,9 +319,8 @@ const SetupPage = () => {
     "lengthOfMeeting",
   ]);
 
-  const [firstWeek, setFirstWeek] = useSynced([...path, "firstWeek"]);
-
-  const [personTypes, setpersonTypes] = useSynced([...path, "personTypes"]);
+  const [firstWeek, setFirstWeek] = useSynced([...path, "firstWeek"]) as [Preset["firstWeek"], (v: Preset["firstWeek"]) => void, boolean];
+  const [personTypes, setPersonTypes] = useSynced([...path, "personTypes"]) as [Preset["personTypes"], (v: Preset["personTypes"]) => void, boolean];
 
   const base = useBase();
   const cohortsTable = base.getTableByIdIfExists(
@@ -333,17 +334,14 @@ const SetupPage = () => {
 
   const typesOfPeopleConfigured =
     Object.keys(preset.personTypes).length > 0 &&
-    Object.keys(preset.personTypes).every((personTypeID) => {
-      const personType = preset.personTypes[personTypeID] as PersonType;
-      return (
+    Object.values(preset.personTypes).every((personType) => (
         personType.name &&
         personType.sourceTable &&
         personType.timeAvField &&
         personType.howManyTypePerCohort &&
         personType.howManyCohortsPerType &&
         personType.cohortsTableField
-      );
-    });
+    ));
 
   return (
     <>
@@ -445,7 +443,7 @@ const SetupPage = () => {
             <Button
               icon="plus"
               onClick={() => {
-                setpersonTypes({
+                setPersonTypes({
                   ...((personTypes as {
                     [key: string]: PersonType;
                   }) || {}),

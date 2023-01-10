@@ -1,4 +1,4 @@
-import GLPK, { Options } from "glpk.js";
+import GLPK, { LP, Options } from "glpk.js";
 
 export interface SchedulerInput {
   lengthOfMeeting: number,
@@ -31,7 +31,7 @@ const fromBinary = (binary: string): [string, string, string] => binary.split("-
 const getCohortCount = (t) => `cohortCount-${t}`;
 
 // See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
-export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): Promise<Cohort[]> {
+export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): Promise<null | Cohort[]> {
   const glpk = await GLPK();
 
   const options: Options = {
@@ -55,7 +55,7 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
   const times = Array.from({ length: maxT }, (_, i) => i);
 
   // VARIABLES
-  const binaries = [];
+  const binaries: string[] = [];
   for (const personType of personTypes) {
     for (const person of personType.people) {
       for (const t of times) {
@@ -64,22 +64,23 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
     }
   }
 
-  const cohortCounts = [];
+  const cohortCounts: string[] = [];
   for (const t of times) {
     cohortCounts.push(getCohortCount(t));
   }
 
-  const assignmentConstraints = [];
-  const availabilityConstraints = [];
-  const nonOverlappingConstraints = [];
+  const assignmentConstraints: LP["subjectTo"] = [];
+  const availabilityConstraints: LP["subjectTo"] = [];
+  const nonOverlappingConstraints: LP["subjectTo"] = [];
   for (const personType of personTypes) {
     for (const person of personType.people) {
-      const personBinaries = [];
+      const personBinaries: string[] = [];
       for (const t of times) {
         const u = toBinary(personType, person, t);
         personBinaries.push(u);
 
         availabilityConstraints.push({
+          name: u + "-availability",
           vars: [{ name: u, coef: 1 }],
           bnds: {
             type: glpk.GLP_UP,
@@ -88,49 +89,53 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
             )
               ? 1
               : 0,
+            lb: 0,
           },
         });
 
-        const meetingVars = [];
+        const meetingVars: string[] = [];
         for (let i = 0; i < lengthOfMeeting; i++) {
           meetingVars.push(toBinary(personType, person, t + i));
         }
         nonOverlappingConstraints.push({
+          name: u + "-non-overlapping",
           vars: meetingVars.map((u) => ({ name: u, coef: 1 })),
           bnds: {
             type: glpk.GLP_UP,
             ub: 1,
+            lb: 0,
           },
         });
       }
 
       assignmentConstraints.push({
+        name: person.id + "-howManyCohorts",
         vars: personBinaries.map((u) => ({ name: u, coef: 1 })),
-        bnds: { type: glpk.GLP_UP, ub: person.howManyCohorts },
+        bnds: { type: glpk.GLP_UP, ub: person.howManyCohorts, lb: 0 },
       });
     }
   }
 
-  const cohortCountConstraints = [];
+  const cohortCountConstraints: LP["subjectTo"] = [];
   for (const t of times) {
     for (const personType of personTypes) {
-      const personBinaries = [];
-      for (const person of personType.people) {
-        personBinaries.push(toBinary(personType, person, t));
-      }
+      const personBinaries = personType.people.map(person => toBinary(personType, person, t));
+
       cohortCountConstraints.push({
+        name: personType.name + "-" + t + "-max",
         vars: [
           ...personBinaries.map((u) => ({ name: u, coef: 1 })),
           { name: getCohortCount(t), coef: -personType.max },
         ],
-        bnds: { type: glpk.GLP_UP, ub: 0 },
+        bnds: { type: glpk.GLP_UP, ub: 0, lb: 0 },
       });
       cohortCountConstraints.push({
+        name: personType.name + "-" + t + "-min",
         vars: [
           ...personBinaries.map((u) => ({ name: u, coef: 1 })),
           { name: getCohortCount(t), coef: -personType.min },
         ],
-        bnds: { type: glpk.GLP_LO, lb: 0 },
+        bnds: { type: glpk.GLP_LO, ub: 0, lb: 0 },
       });
     }
   }
@@ -219,5 +224,6 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
     return cohorts;
   } catch (e) {
     console.log(e);
+    return null;
   }
 }

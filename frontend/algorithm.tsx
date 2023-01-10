@@ -261,7 +261,7 @@ const AlgorithmPage = () => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
-  const preset = globalConfig.get([...path]) as Preset;
+  const preset = globalConfig.get(path) as Preset;
 
   const base = useBase();
 
@@ -352,7 +352,7 @@ const AlgorithmPage = () => {
                 (person) => person.id === personID
               ).timeAv;
               return timeAv.some(
-                ([b, e]) => b <= t && t <= e - grandInput.lengthOfMeeting
+                ([b, e]) => b <= t && t <= e - grandInput?.lengthOfMeeting
               );
             });
           });
@@ -369,7 +369,7 @@ const AlgorithmPage = () => {
         })
       );
     }
-  }, [grandInput.lengthOfMeeting, grandInput.personTypes, solution]);
+  }, [grandInput?.lengthOfMeeting, grandInput?.personTypes, solution]);
 
   return (
     <div>

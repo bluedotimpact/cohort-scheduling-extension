@@ -21,7 +21,7 @@ const OtherPage = () => {
 
   const base = useBase();
 
-  const configuredPersonTypes = preset.personTypes
+  const configuredPersonTypes = Object.values(preset.personTypes)
     .filter((personType) =>
       personType.cohortOverlapFullField ||
       personType.cohortOverlapPartialField

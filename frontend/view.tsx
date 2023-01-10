@@ -285,7 +285,7 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
         <span className="text-xs text-gray-400">
           {hoveredPerson
             ? `Overlaying ${hoveredPerson.name}`
-            : "Hover over a person to view their individual availability"}
+            : "Hover over someone to view their individual availability"}
         </span>
         <TimeAvWidget
           primaryTimeAv={[
