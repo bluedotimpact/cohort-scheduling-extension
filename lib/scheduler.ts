@@ -5,6 +5,7 @@ const getBinary = (personType, person, t) =>
 
 const getCohortCount = (t) => `cohortCount-${t}`;
 
+// See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
 export async function solve({ lengthOfMeeting, personTypes }) {
   //@ts-ignore
   const glpk = await GLPK();

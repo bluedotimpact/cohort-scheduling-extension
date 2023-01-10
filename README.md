@@ -12,16 +12,17 @@ The algorithm backing the cohort finding is a conversion of the problem into a L
 
 ## Developer setup
 
-You need to have Node, npm and the Airtable Blocks SDK (`npm install -g @airtable/blocks-cli`) installed.
+To start developing this extension:
 
-`npm install` to install necessary packages.
+1. Clone this git repository
+2. Install [Node.js](https://nodejs.org/)
+3. Run `npm install`
+4. Run `npm start` (for the 'Bucketing Extension Base' in the BlueDot Impact software AirTable account)
+5. Load the relevant base
+6. Make changes to the code and see them reflected in the app!
 
-`block run` to run the dev server.
+If the changes don't appear to be updating the app, try clicking the extension name then 'Edit extension', then pasting in the server address printed to the console from step 4 (probably `https://localhost:9000`).
 
-`block add-remote [baseid]/[blockid] [name]` to add a new remote/base.
+Release new versions using `npm run release`. If you get the error `airtableApiBlockNotFound`, set up the block CLI with `npx block set-api-key`, getting your API key from the [AirTable account settings page](https://airtable.com/account).
 
-`block release --remote [name]` to release to a base.
-
----
-
-If you have questions, feel free to contact Adam Krivka (krivka.adam@gmail.com).
+If you want to install this on a new base see [these instructions](https://www.airtable.com/developers/apps/guides/run-in-multiple-bases).
