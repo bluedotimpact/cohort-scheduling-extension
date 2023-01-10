@@ -1,3 +1,4 @@
+import { FieldId } from "@airtable/blocks/dist/types/src/types/field";
 import {
   Button,
   Dialog,
@@ -6,36 +7,40 @@ import {
   useBase,
   useGlobalConfig
 } from "@airtable/blocks/ui";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { UNIT_MINUTES } from "../lib/constants";
 import { getDateFromCoord } from "../lib/date";
 import { parseTimeAvString, unparseNumber } from "../lib/parse";
-import { solve } from "../lib/scheduler";
+import { Cohort, PersonType, SchedulerInput, solve } from "../lib/scheduler";
 import { wait } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
-import { PersonType } from "./setup";
+import { PersonType as SetupPersonType } from "./setup";
 import { ViewCohort } from "./view";
 
-const Solution = ({ solution, personTypes }) => {
+interface SolutionProps {
+  solution: Cohort[],
+  personTypes: PersonType[],
+}
+
+const Solution = ({ solution, personTypes }: SolutionProps) => {
   const base = useBase();
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
-  const path = ["presets", selectedPreset];
-  const preset = globalConfig.get([...path]) as Preset;
+  const preset = globalConfig.get(["presets", selectedPreset]) as Preset;
 
   const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
 
   const [viewedCohortIndex, setViewedCohortIndex] = useState(null);
 
-  const goToNextCohort = () => {
+  const goToNextCohort = useCallback(() => {
     setViewedCohortIndex(Math.min(solution.length - 1, viewedCohortIndex + 1));
-  };
+  }, [viewedCohortIndex, solution.length]);
 
-  const goToPreviousCohort = () => {
+  const goToPreviousCohort = useCallback(() => {
     setViewedCohortIndex(Math.max(0, viewedCohortIndex - 1));
-  };
+  }, [viewedCohortIndex]);
 
   useEffect(() => {
     const f = (e) => {
@@ -56,7 +61,7 @@ const Solution = ({ solution, personTypes }) => {
     };
     window.addEventListener("keydown", f);
     return () => window.removeEventListener("keydown", f);
-  }, [viewedCohortIndex]);
+  }, [viewedCohortIndex, goToNextCohort, goToPreviousCohort]);
 
   const [isAcceptDialogOpen, setAcceptDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -94,9 +99,6 @@ const Solution = ({ solution, personTypes }) => {
                   {Object.keys(cohort.people).map((personTypeName) => {
                     const personType = personTypes.find(
                       (pt: PersonType) => pt.name === personTypeName
-                    );
-                    const table = base.getTableByIdIfExists(
-                      personType.sourceTable
                     );
 
                     const avgSize = (personType.min + personType.max) / 2;
@@ -138,15 +140,13 @@ const Solution = ({ solution, personTypes }) => {
                 (person) => !usedPeople.includes(person.id)
               );
               return (
-                <div className="flex items-center">
+                <div key={personType.name} className="flex items-center">
                   <div className="w-24">{personType.name}s:</div>
                   {unusedPeople.length === 0 ? (
                     <div>None</div>
                   ) : (
                     <div className="flex flex-wrap p-1 w-full bg-white rounded-sm border space-x-1">
-                      {unusedPeople.map((person) => {
-                        return <PersonBlob name={person.name} />;
-                      })}
+                      {unusedPeople.map((person) => <PersonBlob key={person.id} name={person.name} />)}
                     </div>
                   )}
                 </div>
@@ -157,8 +157,7 @@ const Solution = ({ solution, personTypes }) => {
         <div className="h-4" />
         <div className="flex justify-between">
           <div className="text-xs text-gray-400">
-            Click on a cohort to view its meeting time and visually check
-            everyone's availability.
+            Click a cohort to view its meeting time and attendee&apos;s availability.
           </div>
           <Button
             //@ts-ignore
@@ -218,9 +217,8 @@ const Solution = ({ solution, personTypes }) => {
                       setSaving(true);
                       const records = solution.map((cohort) => {
                         const start = cohort.time;
-                        const end =
-                          cohort.time + preset.lengthOfMeeting / UNIT_MINUTES;
-                        const fields = {
+                        const end = cohort.time + preset.lengthOfMeeting / UNIT_MINUTES;
+                        const fields: Record<FieldId, unknown> = {
                           [preset.cohortsTableStartDateField]: getDateFromCoord(
                             unparseNumber(start),
                             new Date(preset.firstWeek)
@@ -231,15 +229,9 @@ const Solution = ({ solution, personTypes }) => {
                           ),
                         };
 
-                        for (const personTypeID of Object.keys(
-                          preset.personTypes
-                        )) {
+                        for (const personTypeID of Object.keys(preset.personTypes)) {
                           const personType = preset.personTypes[personTypeID];
-                          fields[personType.cohortsTableField] = cohort.people[
-                            personType.name
-                          ].map((id) => ({
-                            id,
-                          }));
+                          fields[personType.cohortsTableField] = cohort.people[personType.name].map((id) => ({ id }));
                         }
                         return { fields };
                       });
@@ -269,7 +261,7 @@ const AlgorithmPage = () => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
-  const preset = globalConfig.get([...path]) as Preset;
+  const preset = globalConfig.get(path) as Preset;
 
   const base = useBase();
 
@@ -283,17 +275,16 @@ const AlgorithmPage = () => {
     ]
    } */
 
-  const [grandInput, setGrandInput] = useState(null);
-  const [parsingError, setParsingError] = useState(null);
+  const [grandInput, setGrandInput] = useState<null | SchedulerInput>(null);
+  const [parsingError, setParsingError] = useState<null | unknown>(null);
 
   useEffect(() => {
-    let isMounted = true;
     const argh = async () => {
       try {
-        const personTypes = [];
+        const personTypes: PersonType[] = [];
 
         for (const key of Object.keys(preset.personTypes)) {
-          const personType = preset.personTypes[key] as PersonType;
+          const personType: SetupPersonType = preset.personTypes[key];
 
           const table = base.getTableByIdIfExists(personType.sourceTable);
           const source = personType.sourceView
@@ -315,11 +306,11 @@ const AlgorithmPage = () => {
               })
             ).records.map((r) => ({
               id: r.id,
-              name: r.getCellValue(table.primaryField.id),
-              timeAv: parseTimeAvString(r.getCellValue(personType.timeAvField)),
+              name: r.getCellValueAsString(table.primaryField.id),
+              timeAv: parseTimeAvString(r.getCellValueAsString(personType.timeAvField)),
               howManyCohorts:
                 typeof personType.howManyCohortsPerType === "string"
-                  ? r.getCellValue(personType.howManyCohortsPerType)
+                  ? r.getCellValue(personType.howManyCohortsPerType) as number
                   : personType.howManyCohortsPerType,
             })),
           });
@@ -335,42 +326,39 @@ const AlgorithmPage = () => {
     };
 
     argh();
+  }, [base, preset.lengthOfMeeting, preset.personTypes]);
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const [solution, setSolution] = useState<null | Cohort[]>(null);
+  const [error, setError] = useState<null | unknown>(null);
+  const [solving, setSolving] = useState<boolean>(false);
 
-  const [solution, setSolution] = useState(null);
-  const [error, setError] = useState(null);
-  const [solving, setSolving] = useState(false);
-
-  const [checking, setChecking] = useState(false);
-  const [checked, setChecked] = useState(false);
-  const checkSolution = async () => {
-    if (!solution) return;
-    return solution.every((cohort) => {
-      const t = cohort.time;
-
-      return Object.keys(cohort.people).every((personTypeName) => {
-        const personType = grandInput.personTypes.find(
-          (pt) => pt.name === personTypeName
-        );
-
-        return cohort.people[personTypeName].every((personID) => {
-          const timeAv = personType.people.find(
-            (person) => person.id === personID
-          ).timeAv;
-          return timeAv.some(
-            ([b, e]) => b <= t && t <= e - grandInput.lengthOfMeeting
-          );
-        });
-      });
-    });
-  };
+  const [checking, setChecking] = useState<boolean>(false);
+  const [checked, setChecked] = useState<boolean>(false);
 
   useEffect(() => {
     if (solution) {
+      const checkSolution = (async () => {
+        if (!solution) return;
+        return solution.every((cohort) => {
+          const t = cohort.time;
+    
+          return Object.keys(cohort.people).every((personTypeName) => {
+            const personType = grandInput.personTypes.find(
+              (pt) => pt.name === personTypeName
+            );
+    
+            return cohort.people[personTypeName].every((personID) => {
+              const timeAv = personType.people.find(
+                (person) => person.id === personID
+              ).timeAv;
+              return timeAv.some(
+                ([b, e]) => b <= t && t <= e - grandInput?.lengthOfMeeting
+              );
+            });
+          });
+        });
+      });
+
       setChecking(true);
       wait(100).then(() =>
         checkSolution().then((isValid) => {
@@ -381,7 +369,7 @@ const AlgorithmPage = () => {
         })
       );
     }
-  }, [solution]);
+  }, [grandInput?.lengthOfMeeting, grandInput?.personTypes, solution]);
 
   return (
     <div>
@@ -405,7 +393,7 @@ const AlgorithmPage = () => {
                   <div className="flex flex-wrap w-full bg-white border p-1 rounded-sm">
                     {personType.people.map((person) => {
                       return (
-                        <div className="px-1 py-0.5">
+                        <div key={person.id} className="px-1 py-0.5">
                           <PersonBlob key={person.name} name={person.name} />
                         </div>
                       );
