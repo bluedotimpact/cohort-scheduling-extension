@@ -4,6 +4,7 @@
         "start:software": "block run --remote software",
         "release": "npm run release:software",
         "release:software": "block release --remote software",
+        "build": "npm run type-check",
         "type-check": "tsc --noEmit --esModuleInterop --jsx react frontend/**.tsx lib/**.ts",
         "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend lib"
     },
