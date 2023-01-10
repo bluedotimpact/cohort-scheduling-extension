@@ -1,20 +1,25 @@
 {
     "scripts": {
+        "start": "npm run start:software",
+        "start:software": "block run --remote software",
+        "release": "npm run release:software",
+        "release:software": "block release --remote software",
         "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend"
     },
     "dependencies": {
-        "@airtable/blocks": "1.8.0",
-        "@headlessui/react": "^1.6.6",
+        "@airtable/blocks": "1.15.0",
+        "@headlessui/react": "^1.7.7",
         "glpk.js": "^4.0.1",
-        "react": "^16.9.0",
-        "react-dom": "^16.9.0"
+        "react": "^16.14.0",
+        "react-dom": "^16.14.0"
     },
     "devDependencies": {
-        "@typescript-eslint/eslint-plugin": "^3.0.2",
-        "@typescript-eslint/parser": "^2.15.0",
-        "eslint": "^6.3.0",
-        "eslint-plugin-react": "^7.14.3",
-        "eslint-plugin-react-hooks": "^2.0.1",
-        "typescript": "^3.9.3"
+        "@airtable/blocks-cli": "^2.0.2",
+        "@typescript-eslint/eslint-plugin": "^5.48.1",
+        "@typescript-eslint/parser": "^5.48.1",
+        "eslint": "^8.31.0",
+        "eslint-plugin-react": "^7.31.11",
+        "eslint-plugin-react-hooks": "^4.6.0",
+        "typescript": "^4.9.4"
     }
 }
