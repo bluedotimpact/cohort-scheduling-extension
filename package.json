@@ -4,7 +4,8 @@
         "start:software": "block run --remote software",
         "release": "npm run release:software",
         "release:software": "block release --remote software",
-        "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend"
+        "type-check": "tsc --noEmit --esModuleInterop --jsx react frontend/**.tsx lib/**.ts",
+        "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend lib"
     },
     "dependencies": {
         "@airtable/blocks": "1.15.0",

@@ -12,7 +12,6 @@ import { Preset } from ".";
 import { dateToCoord } from "../lib/date";
 import { prettyPrintDayTime } from "../lib/format";
 import { parseTimeAvString } from "../lib/parse";
-import { PersonType } from "./setup";
 
 const OtherPage = () => {
   const globalConfig = useGlobalConfig();
@@ -22,13 +21,11 @@ const OtherPage = () => {
 
   const base = useBase();
 
-  const configuredPersonTypes = Object.keys(preset.personTypes)
-    .filter(
-      (id) =>
-        preset.personTypes[id].cohortOverlapFullField ||
-        preset.personTypes[id].cohortOverlapPartialField
+  const configuredPersonTypes = preset.personTypes
+    .filter((personType) =>
+      personType.cohortOverlapFullField ||
+      personType.cohortOverlapPartialField
     )
-    .map((id) => preset.personTypes[id] as PersonType);
 
   const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
   const rawCohorts = useRecords(cohortsTable, {
@@ -39,10 +36,8 @@ const OtherPage = () => {
   });
   const allCohorts = rawCohorts.map((cohort) => {
     const meetingDates = [
-      new Date(
-        cohort.getCellValue(preset.cohortsTableStartDateField) as string
-      ),
-      new Date(cohort.getCellValue(preset.cohortsTableEndDateField) as string),
+      new Date(cohort.getCellValueAsString(preset.cohortsTableStartDateField)),
+      new Date(cohort.getCellValueAsString(preset.cohortsTableEndDateField)),
     ];
     const timeAv = meetingDates
       .map(dateToCoord)
@@ -66,7 +61,7 @@ const OtherPage = () => {
       const updatedRecords = [];
       for (const record of records) {
         const parsedTimeAv = parseTimeAvString(
-          record.getCellValue(personType.timeAvField)
+          record.getCellValueAsString(personType.timeAvField)
         );
 
         const fields = {};

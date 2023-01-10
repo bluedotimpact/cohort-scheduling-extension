@@ -1,3 +1,4 @@
+import Record from "@airtable/blocks/dist/types/src/models/record";
 import {
   expandRecord,
   Heading,
@@ -16,9 +17,10 @@ import { UNIT_MINUTES } from "../lib/constants";
 import { dateToCoord } from "../lib/date";
 import { prettyPrintDayTime } from "../lib/format";
 import { parseDayTime, parseTimeAvString, unparseNumber } from "../lib/parse";
+import { Cohort } from "../lib/scheduler";
 import { findOverlapGroup } from "../lib/util";
 import { CohortBlob, PersonBlob } from "./components/Blobs";
-import { TimeAvWidgetOverlay } from "./components/TimeAvWidget";
+import { TimeAvWidget } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
 
 const ViewPerson = ({ tableId, recordId }) => {
@@ -36,10 +38,9 @@ const ViewPerson = ({ tableId, recordId }) => {
     const personType = preset.personTypes[id];
     return personType.sourceTable === tableId;
   });
-  const personType = preset.personTypes[personTypeId] as PersonType;
+  const personType: PersonType = preset.personTypes[personTypeId];
 
-  const timeAv = record.getCellValue(personType.timeAvField);
-  const parsedTimeAv = parseTimeAvString(timeAv);
+  const timeAv = parseTimeAvString(record.getCellValueAsString(personType.timeAvField));
 
   const [overlapType, setOverlapType] = useState<"full" | "partial">("full");
 
@@ -71,22 +72,22 @@ const ViewPerson = ({ tableId, recordId }) => {
 
   const cohortsFull = allCohorts.filter((cohort) => {
     const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-    return parsedTimeAv.some(([b, e]) => mb >= b && me <= e);
+    return timeAv.some(([b, e]) => mb >= b && me <= e);
   });
 
   const cohortsPartial = allCohorts.filter((cohort) => {
     const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-    return parsedTimeAv.some(
+    return timeAv.some(
       ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)
     );
   });
 
   const [hoveredCohort, setHoveredCohort] = useState(null);
 
-  if (!timeAv) {
+  if (timeAv.length === 0) {
     return (
       <div className="text-gray-700">
-        Participant hasn't filled out the time availability form.
+        Participant hasn&apos;t filled out the time availability form.
       </div>
     );
   } else {
@@ -95,8 +96,8 @@ const ViewPerson = ({ tableId, recordId }) => {
         <Heading>
           {record.name} ({personType.name})
         </Heading>
-        <TimeAvWidgetOverlay
-          primaryTimeAv={parseTimeAvString(timeAv)}
+        <TimeAvWidget
+          primaryTimeAv={timeAv}
           primaryClass="bg-green-500"
           secondaryTimeAv={
             hoveredCohort ? parseTimeAvString(hoveredCohort.timeAv) : []
@@ -129,6 +130,7 @@ const ViewPerson = ({ tableId, recordId }) => {
               (cohort) => {
                 return (
                   <div
+                    key={cohort.id}
                     className="flex p-1 items-center cursor-pointer hover:bg-slate-50 hover:text-gray-600"
                     onMouseEnter={() => setHoveredCohort(cohort)}
                     onMouseLeave={() => setHoveredCohort(null)}
@@ -156,7 +158,11 @@ const ViewPerson = ({ tableId, recordId }) => {
   }
 };
 
-export const ViewCohort = ({ cohort }) => {
+interface ViewCohortProps {
+  cohort: Cohort
+}
+
+export const ViewCohort = ({ cohort }: ViewCohortProps) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
@@ -169,7 +175,7 @@ export const ViewCohort = ({ cohort }) => {
     setHoveredPerson(null);
   }, [cohort]);
 
-  const peopleRecords = {};
+  const peopleRecords: { [personTypeId: string]: Record[] } = {};
   const allPeople = Object.keys(cohort.people).reduce((acc, personTypeName) => {
     const personTypeID = Object.keys(preset.personTypes).find(
       (id) => preset.personTypes[id].name === personTypeName
@@ -178,27 +184,27 @@ export const ViewCohort = ({ cohort }) => {
 
     const table = base.getTableByIdIfExists(personType.sourceTable);
 
+    // TODO: we shouldn't use a hook here
+    // If the set of person types changes, there will be undefined behaviour!
+    // In practice this is very rare though
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     const records = useRecords(table);
     peopleRecords[personTypeID] = records;
     const people = cohort.people[personTypeName].map((personID) => {
       const person = records.find((person) => person.id === personID);
       //@ts-ignore
-      person.timeAv = parseTimeAvString(
-        person.getCellValue(personType.timeAvField)
-      );
+      person.timeAv = parseTimeAvString(person.getCellValueAsString(personType.timeAvField));
       return person;
     });
     return [...acc, ...people];
   }, []);
 
   useEffect(() => {
-    const f = (e) => {
-      // if any arrow key
-      if (e.keyCode == 37 || e.keyCode == 39) {
+    const f = (e: KeyboardEvent) => {
+      if (e.key == "ArrowLeft" || e.key == "ArrowRight") {
         e.preventDefault();
 
-        // if arrow right
-        if (e.keyCode === 39) {
+        if (e.key === "ArrowRight") {
           if (!hoveredPerson) {
             setHoveredPerson(allPeople[0]);
           } else {
@@ -208,8 +214,8 @@ export const ViewCohort = ({ cohort }) => {
             }
           }
         }
-        // if arrow left
-        if (e.keyCode === 37) {
+
+        if (e.key === "ArrowLeft") {
           if (!hoveredPerson) {
             setHoveredPerson(allPeople[allPeople.length - 1]);
           } else {
@@ -223,6 +229,8 @@ export const ViewCohort = ({ cohort }) => {
     };
     window.addEventListener("keydown", f);
     return () => window.removeEventListener("keydown", f);
+  // TODO: correct dependencies after nested useRecord call above is removed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoveredPerson]);
 
   const wholeOverlap = findOverlapGroup(allPeople.map(({ timeAv }) => timeAv));
@@ -241,19 +249,19 @@ export const ViewCohort = ({ cohort }) => {
       {Object.keys(preset.personTypes).map((personTypeID) => {
         const personType = preset.personTypes[personTypeID];
         return (
-          <div className="flex">
+          <div key={personTypeID} className="flex">
             <div className="w-28 shrink-0 font-semibold">
               {personType.name}s:
             </div>
             <div className="flex flex-wrap">
               {cohort.people[personType.name].map((personID) => {
-                const table = base.getTableByIdIfExists(personType.sourceTable);
-
                 const person = peopleRecords[personTypeID].find(
                   (person) => person.id === personID
                 );
+
                 return (
                   <div
+                    key={personID}
                     onMouseEnter={() => {
                       setHoveredPerson(person);
                     }}
@@ -277,9 +285,9 @@ export const ViewCohort = ({ cohort }) => {
         <span className="text-xs text-gray-400">
           {hoveredPerson
             ? `Overlaying ${hoveredPerson.name}`
-            : "You can hover over people above to visually check that they can meet with their cohort"}
+            : "Hover over a person to view their individual availability"}
         </span>
-        <TimeAvWidgetOverlay
+        <TimeAvWidget
           primaryTimeAv={[
             [cohort.time, cohort.time + preset.lengthOfMeeting / UNIT_MINUTES],
           ]}

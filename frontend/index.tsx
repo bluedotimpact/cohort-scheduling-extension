@@ -25,6 +25,7 @@ export type Preset = {
   name: string;
   lengthOfMeeting: number;
   firstWeek: number;
+  // personTypeID is the numeric index into this array
   personTypes: PersonType[];
   cohortsTable?: string;
   cohortsTableStartDateField?: string;
@@ -152,9 +153,8 @@ function App() {
     preset.cohortsTable &&
     preset.cohortsTableStartDateField &&
     preset.cohortsTableEndDateField &&
-    Object.keys(preset.personTypes).length > 0 &&
-    Object.keys(preset.personTypes).every((personTypeID) => {
-      const personType = preset.personTypes[personTypeID] as PersonType;
+    preset.personTypes.length > 0 &&
+    preset.personTypes.every((personType) => {
       return (
         personType.name &&
         personType.sourceTable &&
