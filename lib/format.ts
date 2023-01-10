@@ -1,4 +1,4 @@
-import { dayMappingInverted } from "./parse";
+import { BDDateTime, BDTime, dayMappingInverted } from "./parse";
 
 export function twoDigits(n: number): string {
   const s = `${n}`;
@@ -29,10 +29,10 @@ export function renderDuration(ms: number): string {
   return `${h}h:${twoDigits(m)}m`;
 }
 
-export function prettyPrintTime({ hour, minute }) {
+export function prettyPrintTime({ hour, minute }: BDTime) {
   return twoDigits(hour) + ":" + twoDigits(minute);
 }
 
-export function prettyPrintDayTime({ day, hour, minute }) {
+export function prettyPrintDayTime({ day, hour, minute }: BDDateTime) {
   return dayMappingInverted[day] + prettyPrintTime({ hour, minute });
 }

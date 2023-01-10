@@ -1,16 +1,40 @@
-import GLPK from "glpk.js";
+import GLPK, { LP, Options } from "glpk.js";
 
-const getBinary = (personType, person, t) =>
-  `${personType.name}-${person.id}-${t}`;
+export interface SchedulerInput {
+  lengthOfMeeting: number,
+  personTypes: PersonType[],
+}
+
+export interface PersonType {
+  name: string,
+  min: number,
+  max: number,
+  people: Person[],
+}
+
+export interface Person {
+  id: string,
+  name: string,
+  timeAv: [number, number][],
+  howManyCohorts: number,
+}
+
+export interface Cohort {
+  time: number,
+  /** Map from person type name -> person id */
+  people: { [personType: string]: string[] },
+}
+
+const toBinary = (personType: PersonType, person: Person, t: number) => `${personType.name}-${person.id}-${t}`;
+const fromBinary = (binary: string): [string, string, string] => binary.split("-") as [string, string, string];
 
 const getCohortCount = (t) => `cohortCount-${t}`;
 
 // See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
-export async function solve({ lengthOfMeeting, personTypes }) {
-  //@ts-ignore
+export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): Promise<null | Cohort[]> {
   const glpk = await GLPK();
 
-  const options = {
+  const options: Options = {
     msglev: glpk.GLP_MSG_ALL,
     presol: true,
     cb: {
@@ -31,31 +55,32 @@ export async function solve({ lengthOfMeeting, personTypes }) {
   const times = Array.from({ length: maxT }, (_, i) => i);
 
   // VARIABLES
-  const binaries = [];
+  const binaries: string[] = [];
   for (const personType of personTypes) {
     for (const person of personType.people) {
       for (const t of times) {
-        binaries.push(getBinary(personType, person, t));
+        binaries.push(toBinary(personType, person, t));
       }
     }
   }
 
-  const cohortCounts = [];
+  const cohortCounts: string[] = [];
   for (const t of times) {
     cohortCounts.push(getCohortCount(t));
   }
 
-  const assignmentConstraints = [];
-  const availabilityConstraints = [];
-  const nonOverlappingConstraints = [];
+  const assignmentConstraints: LP["subjectTo"] = [];
+  const availabilityConstraints: LP["subjectTo"] = [];
+  const nonOverlappingConstraints: LP["subjectTo"] = [];
   for (const personType of personTypes) {
     for (const person of personType.people) {
-      const personBinaries = [];
+      const personBinaries: string[] = [];
       for (const t of times) {
-        const u = getBinary(personType, person, t);
+        const u = toBinary(personType, person, t);
         personBinaries.push(u);
 
         availabilityConstraints.push({
+          name: u + "-availability",
           vars: [{ name: u, coef: 1 }],
           bnds: {
             type: glpk.GLP_UP,
@@ -64,49 +89,53 @@ export async function solve({ lengthOfMeeting, personTypes }) {
             )
               ? 1
               : 0,
+            lb: 0,
           },
         });
 
-        const meetingVars = [];
+        const meetingVars: string[] = [];
         for (let i = 0; i < lengthOfMeeting; i++) {
-          meetingVars.push(getBinary(personType, person, t + i));
+          meetingVars.push(toBinary(personType, person, t + i));
         }
         nonOverlappingConstraints.push({
+          name: u + "-non-overlapping",
           vars: meetingVars.map((u) => ({ name: u, coef: 1 })),
           bnds: {
             type: glpk.GLP_UP,
             ub: 1,
+            lb: 0,
           },
         });
       }
 
       assignmentConstraints.push({
+        name: person.id + "-howManyCohorts",
         vars: personBinaries.map((u) => ({ name: u, coef: 1 })),
-        bnds: { type: glpk.GLP_UP, ub: person.howManyCohorts },
+        bnds: { type: glpk.GLP_UP, ub: person.howManyCohorts, lb: 0 },
       });
     }
   }
 
-  const cohortCountConstraints = [];
+  const cohortCountConstraints: LP["subjectTo"] = [];
   for (const t of times) {
     for (const personType of personTypes) {
-      const personBinaries = [];
-      for (const person of personType.people) {
-        personBinaries.push(getBinary(personType, person, t));
-      }
+      const personBinaries = personType.people.map(person => toBinary(personType, person, t));
+
       cohortCountConstraints.push({
+        name: personType.name + "-" + t + "-max",
         vars: [
           ...personBinaries.map((u) => ({ name: u, coef: 1 })),
           { name: getCohortCount(t), coef: -personType.max },
         ],
-        bnds: { type: glpk.GLP_UP, ub: 0 },
+        bnds: { type: glpk.GLP_UP, ub: 0, lb: 0 },
       });
       cohortCountConstraints.push({
+        name: personType.name + "-" + t + "-min",
         vars: [
           ...personBinaries.map((u) => ({ name: u, coef: 1 })),
           { name: getCohortCount(t), coef: -personType.min },
         ],
-        bnds: { type: glpk.GLP_LO, lb: 0 },
+        bnds: { type: glpk.GLP_LO, ub: 0, lb: 0 },
       });
     }
   }
@@ -140,7 +169,7 @@ export async function solve({ lengthOfMeeting, personTypes }) {
     const timeslots = {};
     for (const binary of Object.keys(res.result.vars)) {
       if (binary.includes("cohortCount")) continue;
-      const [personType, person, t] = binary.split("-");
+      const [personType, person, t] = fromBinary(binary);
       if (res.result.vars[binary] == 1) {
         if (!timeslots[t]) timeslots[t] = {};
         if (!timeslots[t][personType]) timeslots[t][personType] = [];
@@ -148,7 +177,7 @@ export async function solve({ lengthOfMeeting, personTypes }) {
       }
     }
 
-    const largeCohorts = [];
+    const largeCohorts: Cohort[] = [];
     for (const t of Object.keys(timeslots)) {
       largeCohorts.push({
         time: parseInt(t),
@@ -156,7 +185,7 @@ export async function solve({ lengthOfMeeting, personTypes }) {
       });
     }
 
-    const cohorts = [];
+    const cohorts: Cohort[] = [];
     for (const largeCohort of largeCohorts) {
       const count = res.result.vars[getCohortCount(largeCohort.time)];
       const cohortCounts = {};
@@ -195,5 +224,6 @@ export async function solve({ lengthOfMeeting, personTypes }) {
     return cohorts;
   } catch (e) {
     console.log(e);
+    return null;
   }
 }

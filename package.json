@@ -4,7 +4,10 @@
         "start:software": "block run --remote software",
         "release": "npm run release:software",
         "release:software": "block release --remote software",
-        "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend"
+        "build": "npm run type-check",
+        "type-check": "tsc --noEmit --esModuleInterop --jsx react frontend/**.tsx lib/**.ts",
+        "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend lib",
+        "postinstall": "patch-package"
     },
     "dependencies": {
         "@airtable/blocks": "1.15.0",
@@ -20,6 +23,7 @@
         "eslint": "^8.31.0",
         "eslint-plugin-react": "^7.31.11",
         "eslint-plugin-react-hooks": "^4.6.0",
+        "patch-package": "^6.5.1",
         "typescript": "^4.9.4"
     }
 }
