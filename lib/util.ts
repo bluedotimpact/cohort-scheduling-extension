@@ -1,3 +1,4 @@
+import { Interval } from "./parse";
 
 export async function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -7,7 +8,7 @@ export function newUID() {
   return Math.random().toString(36).substring(2, 10);
 }
 
-export function parseCommaSeparatedNumberList(list: string): number[] | null {
+export function parseCommaSeparatedNumberList(list: string): number[] | undefined {
   const result = list
     .split(",")
     .filter((s) => s.trim().length !== 0)
@@ -17,36 +18,47 @@ export function parseCommaSeparatedNumberList(list: string): number[] | null {
   }
 }
 
-export function isWithin(interval, n) {
-  if (interval[0] <= n && n < interval[1]) {
-    return true;
-  }
+export function isWithin(interval: Interval, n: number): boolean {
+  return interval[0] <= n && n < interval[1]
 }
 
-function intersectIntervals([x1, x2], [y1, y2]) {
-  if (x1 > y2 || x2 < y1) {
-    return null;
-  } else {
-    return [Math.max(x1, y1), Math.min(x2, y2)];
-  }
+function flattenIntervals(intervals: Interval[]): Interval[] {
+  return combineIntervalsWithoutFlattening(intervals).map(v => v.interval);
 }
 
-export function intersectIntervalArrays(intervals1, intervals2) {
-  if (!intervals1) {
-    return intervals2;
-  }
-  let result = [];
-  for (const interval1 of intervals1) {
-    for (const interval2 of intervals2) {
-      const intersection = intersectIntervals(interval1, interval2);
-      if (intersection) {
-        result.push(intersection);
-      }
+interface CombinedInterval {
+  count: number,
+  interval: Interval,
+}
+
+export function combineIntervals(intervals: Interval[][]): CombinedInterval[] {
+  // Ensure each person's intervals don't overlap with themselves
+  const flattened = intervals.map(flattenIntervals).flat()
+
+  return combineIntervalsWithoutFlattening(flattened)
+}
+
+function combineIntervalsWithoutFlattening(intervals: Interval[]): CombinedInterval[] {
+  // Convert to intermediate representation, so we can scan over time linearly
+  const intervalEvents = intervals.flatMap(interval => [
+    { type: "start", at: interval[0] },
+    { type: "end", at: interval[1] },
+  ]).sort((a, b) => a.at - b.at)
+
+  const result: CombinedInterval[] = [];
+  for (const event of intervalEvents) {
+    // Close the last interval
+    const lastInterval = result[result.length - 1];
+    if (lastInterval) {
+      lastInterval.interval[1] = event.at;
     }
-  }
-  return result;
-}
 
-export function findOverlapGroup(people) {
-  return people.reduce(intersectIntervalArrays);
+    result.push({
+      count: (lastInterval?.count ?? 0) + (event.type === "start" ? 1 : -1),
+      interval: [event.at, undefined]
+    })
+  }
+
+  // Remove empty or non-overlapping areas
+  return result.filter(i => i.count > 0 && i.interval[1] > i.interval[0]);
 }
