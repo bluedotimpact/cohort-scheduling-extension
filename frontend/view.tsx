@@ -16,11 +16,11 @@ import { Preset } from ".";
 import { UNIT_MINUTES } from "../lib/constants";
 import { dateToCoord } from "../lib/date";
 import { prettyPrintDayTime } from "../lib/format";
-import { parseDayTime, parseTimeAvString, unparseNumber } from "../lib/parse";
+import { Interval, parseDayTime, parseTimeAvString, unparseNumber } from "../lib/parse";
 import { Cohort } from "../lib/scheduler";
-import { findOverlapGroup } from "../lib/util";
+import { combineIntervals } from "../lib/util";
 import { CohortBlob, PersonBlob } from "./components/Blobs";
-import { TimeAvWidget } from "./components/TimeAvWidget";
+import { TimeAvWidget, TimeAvWidgetProps } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
 
 const ViewPerson = ({ tableId, recordId }) => {
@@ -97,28 +97,28 @@ const ViewPerson = ({ tableId, recordId }) => {
           {record.name} ({personType.name})
         </Heading>
         <TimeAvWidget
-          primaryTimeAv={timeAv}
-          primaryClass="bg-green-500"
-          secondaryTimeAv={
-            hoveredCohort ? parseTimeAvString(hoveredCohort.timeAv) : []
-          }
-          secondaryClass="bg-purple-400 opacity-70"
+          availabilities={[{
+            intervals: timeAv,
+            class: "bg-green-500",
+          }, {
+            intervals: hoveredCohort ? parseTimeAvString(hoveredCohort.timeAv) : [],
+            class: "bg-purple-500",
+            opacity: 0.7,
+          }]}
         />
         <div className="h-4" />
         <div className="flex items-center space-x-3">
-          <Heading size="small">Overlap with cohorts</Heading>
+          <Heading size="small" className="flex-1">Overlap with cohorts</Heading>
           <Switch
             value={overlapType === "full"}
             onChange={(value) => setOverlapType(value ? "full" : "partial")}
             label={overlapType === "full" ? "Full" : "Partial"}
-            width="100px"
+            width="auto"
           />
-          {hoveredCohort && (
-            <span className="text-xs text-gray-500">
-              Overlaying cohort {hoveredCohort.name}
-            </span>
-          )}
         </div>
+        <span className="text-xs text-gray-500">
+          {hoveredCohort ? `Overlaying cohort ${hoveredCohort.name}` : "Hover over a cohort to view its overlap"}
+        </span>
         <div className="h-2" />
         <div className="w-full rounded border border-solid border-gray-200 max-h-72 overflow-auto">
           <div className="flex bg-slate-100 p-1 font-medium">
@@ -170,13 +170,13 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
 
   const base = useBase();
 
-  const [hoveredPerson, setHoveredPerson] = useState(null);
+  const [hoveredPerson, setHoveredPerson] = useState<null | (Record & { timeAv: Interval[] })>(null);
   useEffect(() => {
     setHoveredPerson(null);
   }, [cohort]);
 
-  const peopleRecords: { [personTypeId: string]: Record[] } = {};
-  const allPeople = Object.keys(cohort.people).reduce((acc, personTypeName) => {
+  const peopleRecords: { [personTypeId: string]: (Record & { timeAv: Interval[] })[] } = {};
+  const allPeople = Object.keys(cohort.people).reduce<(Record & { timeAv: Interval[] })[]>((acc, personTypeName) => {
     const personTypeID = Object.keys(preset.personTypes).find(
       (id) => preset.personTypes[id].name === personTypeName
     );
@@ -188,11 +188,10 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
     // If the set of person types changes, there will be undefined behaviour!
     // In practice this is very rare though
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    const records = useRecords(table);
+    const records = useRecords(table) as (Record & { timeAv: Interval[] })[];
     peopleRecords[personTypeID] = records;
     const people = cohort.people[personTypeName].map((personID) => {
-      const person = records.find((person) => person.id === personID);
-      //@ts-ignore
+      const person = records.find((person) => person.id === personID)
       person.timeAv = parseTimeAvString(person.getCellValueAsString(personType.timeAvField));
       return person;
     });
@@ -233,7 +232,29 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoveredPerson]);
 
-  const wholeOverlap = findOverlapGroup(allPeople.map(({ timeAv }) => timeAv));
+  const combinedIntervals = combineIntervals(allPeople.map(({ timeAv }) => timeAv));
+
+  const availabilitiesByCount = combinedIntervals.reduce<{ [count: number]: Interval[] }>((acc, cur) => {
+    acc[cur.count] = acc[cur.count] ?? []
+    acc[cur.count].push(cur.interval)
+    return acc;
+  }, {})
+
+  const agreedTime: TimeAvWidgetProps["availabilities"][number] = {
+    intervals: [[cohort.time, cohort.time + preset.lengthOfMeeting / UNIT_MINUTES]],
+    class: "bg-purple-500",
+  }
+  const availabilities: TimeAvWidgetProps["availabilities"] = hoveredPerson
+    ? [{
+        intervals: hoveredPerson.timeAv,
+        class: "bg-green-500",
+        opacity: 0.3,
+      }, agreedTime]
+    : [...Object.entries(availabilitiesByCount).map(([count, intervals]) => ({
+        intervals,
+        class: "bg-green-500",
+        opacity: parseInt(count) / allPeople.length,
+      })), agreedTime];
 
   return (
     <>
@@ -287,16 +308,7 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
             ? `Overlaying ${hoveredPerson.name}`
             : "Hover over someone to view their individual availability"}
         </span>
-        <TimeAvWidget
-          primaryTimeAv={[
-            [cohort.time, cohort.time + preset.lengthOfMeeting / UNIT_MINUTES],
-          ]}
-          primaryClass="bg-purple-500"
-          secondaryTimeAv={hoveredPerson?.timeAv || []}
-          secondaryClass="bg-green-500 opacity-30"
-          tertiaryTimeAv={wholeOverlap}
-          tertiaryClass="bg-purple-500 opacity-30"
-        />
+        <TimeAvWidget availabilities={availabilities} />
       </div>
     </>
   );

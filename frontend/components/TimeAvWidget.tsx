@@ -19,23 +19,15 @@ const dayLabels = {
  */
 const zeroUntilN = (n: number): number[] => new Array(n).fill(0).map((_, i) => i);
 
-interface TimeAvWidgetProps {
-  primaryTimeAv: Interval[],
-  primaryClass: string,
-  secondaryTimeAv?: Interval[],
-  secondaryClass?: string,
-  tertiaryTimeAv?: Interval[],
-  tertiaryClass?: string,
+export interface TimeAvWidgetProps {
+  availabilities: {
+    intervals: Interval[],
+    class: string,
+    opacity?: number,
+  }[]
 }
 
-export function TimeAvWidget({
-  primaryTimeAv,
-  primaryClass,
-  secondaryTimeAv = [],
-  secondaryClass = "",
-  tertiaryTimeAv = [],
-  tertiaryClass = "",
-}: TimeAvWidgetProps) {
+export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
   const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
 
   const allNumbers = zeroUntilN(7 * 24 * multiplier);
@@ -85,40 +77,18 @@ export function TimeAvWidget({
             style={{ gridTemplateRows: "repeat(48, minmax(0, 1fr))" }}
           >
             {allNumbers.map((number) => {
-              const isPrimary = primaryTimeAv?.some((interval) =>
-                isWithin(interval, number)
-              );
-              const isSecondary = secondaryTimeAv?.some((interval) =>
-                isWithin(interval, number)
-              );
-              const isTertiary = tertiaryTimeAv?.some((interval) =>
-                isWithin(interval, number)
-              );
+              const relevantAvailabilities = availabilities.filter(a =>
+                a.intervals.some(interval => isWithin(interval, number))
+              )
 
               const isEven = Math.floor(number) % labelFreq == 0;
               return (
                 <div
                   key={number}
-                  className={
-                    "h-2 relative border-r border-b border-gray-800 border-r-solid " +
-                    (isPrimary ? primaryClass : "bg-red-50")
-                  }
-                  style={{ borderBottomStyle: isEven ? "dotted" : "solid" }}
-                >
-                  {isSecondary && (
-                    <div
-                      className={
-                        "absolute inset-0 w-full h-full " + secondaryClass
-                      }
-                    />
-                  )}
-                  {isTertiary && (
-                    <div
-                      className={
-                        "absolute inset-0 w-full h-full " + tertiaryClass
-                      }
-                    />
-                  )}
+                  className="h-2 relative border-r border-b border-gray-800 border-r-solid" style={{ borderBottomStyle: isEven ? "dotted" : "solid" }} >
+                  {relevantAvailabilities.map((a, i) => (
+                    <div key={i} className={"absolute inset-0 w-full h-full " + a.class} style={{ opacity: a.opacity }} />
+                  ))}
                 </div>
               );
             })}

@@ -25,10 +25,10 @@ export interface Cohort {
   people: { [personType: string]: string[] },
 }
 
-const toBinary = (personType: PersonType, person: Person, t: number) => `${personType.name}-${person.id}-${t}`;
+const toBinary = (personType: PersonType, person: Person, t: number): string => `${personType.name}-${person.id}-${t}`;
 const fromBinary = (binary: string): [string, string, string] => binary.split("-") as [string, string, string];
 
-const getCohortCount = (t) => `cohortCount-${t}`;
+const getCohortCount = (t: number): string => `cohortCount-${t}`;
 
 // See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
 export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): Promise<null | Cohort[]> {
