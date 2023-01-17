@@ -49,22 +49,31 @@ function parseTime(time: string): number {
   return parseInt(hour) + parseInt(minute) / 60;
 }
 
+const isDay = (d: string): d is keyof typeof dayMapping => {
+  return d in dayMapping
+}
+
 export function parseDayTime(daytime: string): number {
   const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
 
-  const [, d, t] = daytime.match(/^([MTWRFSU])(\d+:\d+)$/);
-  return (dayMapping[d] * 24 + parseTime(t)) * multiplier;
+  const match = daytime.match(/^([MTWRFSU])(\d+:\d+)$/);
+  if (!match) throw new Error(`Invalid daytime string: ${daytime}`)
+  if (!isDay(match[1])) throw new Error(`Invalid daytime string (invalid day): ${daytime}`)
+  return (dayMapping[match[1]] * 24 + parseTime(match[2])) * multiplier;
 }
 
 function parseInterval(interval: string, multiplier: number): Interval {
-  const [, d1, t1, d2, t2] =
-    interval.match(/(M|T|W|R|F|S|U)(\d+:\d+) (M|T|W|R|F|S|U)(\d+:\d+)/) || [];
+  const match = interval.match(/(M|T|W|R|F|S|U)(\d+:\d+) (M|T|W|R|F|S|U)(\d+:\d+)/);
+  if (!match) throw new Error(`Invalid interval string: ${interval}`)
+  const [, d1, t1, d2, t2] = match;
+  if (!isDay(d1)) throw new Error(`Invalid interval string (invalid first day): ${interval}`)
+  if (!isDay(d2)) throw new Error(`Invalid interval string (invalid second day): ${interval}`)
 
   let [b, e] = [
     [d1, t1],
     [d2, t2],
   ].map(([d, t]) => {
-    return (dayMapping[d] * 24 + parseTime(t)) * multiplier;
+    return (dayMapping[d as keyof typeof dayMapping] * 24 + parseTime(t)) * multiplier;
   });
 
   if (b > e) {
@@ -73,8 +82,8 @@ function parseInterval(interval: string, multiplier: number): Interval {
   return [b, e];
 }
 
-export function parseTimeAvString(timeAv: string): Interval[] {
-  if (!timeAv || timeAv.length === 0) return [];
+export function parseTimeAvString(timeAv: string | undefined): Interval[] {
+  if (!timeAv) return [];
   const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
 
   return timeAv.split(", ").map((ts) => parseInterval(ts, multiplier));
