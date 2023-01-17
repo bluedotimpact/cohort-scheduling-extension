@@ -30,30 +30,27 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const preset = globalConfig.get(["presets", selectedPreset]) as Preset;
 
-  const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
+  const cohortsTable = preset.cohortsTable ? base.getTableByIdIfExists(preset.cohortsTable) : null;
 
-  const [viewedCohortIndex, setViewedCohortIndex] = useState(null);
+  const [viewedCohortIndex, setViewedCohortIndex] = useState<number | undefined>();
 
   const goToNextCohort = useCallback(() => {
-    setViewedCohortIndex(Math.min(solution.length - 1, viewedCohortIndex + 1));
+    setViewedCohortIndex(Math.min(solution.length - 1, (viewedCohortIndex ?? 0) + 1));
   }, [viewedCohortIndex, solution.length]);
 
   const goToPreviousCohort = useCallback(() => {
-    setViewedCohortIndex(Math.max(0, viewedCohortIndex - 1));
+    setViewedCohortIndex(Math.max(0, (viewedCohortIndex ?? 0) - 1));
   }, [viewedCohortIndex]);
 
   useEffect(() => {
-    const f = (e) => {
-      if (viewedCohortIndex !== null) {
-        // if any arrow key
-        if (e.keyCode == 38 || e.keyCode == 40) {
+    const f = (e: KeyboardEvent) => {
+      if (viewedCohortIndex !== undefined) {
+        if (e.key == "ArrowDown" || e.key == "ArrowUp") {
           e.preventDefault();
-          // if arrow down
-          if (e.keyCode === 40) {
+          if (e.key === "ArrowDown") {
             goToNextCohort();
           }
-          // if arrow up
-          if (e.keyCode === 38) {
+          if (e.key === "ArrowUp") {
             goToPreviousCohort();
           }
         }
@@ -97,11 +94,11 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                     {i + 1}
                   </div>
                   {Object.keys(cohort.people).map((personTypeName) => {
-                    const personType = personTypes.find(
-                      (pt: PersonType) => pt.name === personTypeName
-                    );
+                    const personType = personTypes.find((pt: PersonType) => pt.name === personTypeName);
+                    if (!personType) throw new Error('Person type in cohort but not configured');
 
                     const avgSize = (personType.min + personType.max) / 2;
+
                     return (
                       <div
                         key={personType.name}
@@ -112,11 +109,7 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                           return (
                             <PersonBlob
                               key={personID}
-                              name={
-                                personType.people.find(
-                                  (person) => person.id === personID
-                                ).name
-                              }
+                              name={personType.people.find((person) => person.id === personID)?.name}
                             />
                           );
                         })}
@@ -133,12 +126,8 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
           <div className="text-md font-semibold">Unused people</div>
           <div className="space-y-2">
             {personTypes.map((personType) => {
-              const usedPeople = solution.reduce((acc, cohort) => {
-                return acc.concat(cohort.people[personType.name]);
-              }, []);
-              const unusedPeople = personType.people.filter(
-                (person) => !usedPeople.includes(person.id)
-              );
+              const usedPeople = solution.map(cohort => cohort.people[personType.name]).flat();
+              const unusedPeople = personType.people.filter((person) => !usedPeople.includes(person.id));
               return (
                 <div key={personType.name} className="flex items-center">
                   <div className="w-24">{personType.name}s:</div>
@@ -170,10 +159,10 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
           </Button>
         </div>
       </div>
-      {viewedCohortIndex !== null && (
+      {viewedCohortIndex !== undefined && (
         <Dialog
           onClose={() => {
-            setViewedCohortIndex(null);
+            setViewedCohortIndex(undefined);
           }}
         >
           <div className="flex justify-between">
@@ -235,7 +224,7 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                         }
                         return { fields };
                       });
-                      console.log(records);
+                      if (!cohortsTable) throw new Error('Could not access cohorts table')
                       await cohortsTable.createRecordsAsync(records);
                       setSaving(false);
                       setAcceptDialogOpen(false);
@@ -275,43 +264,60 @@ const AlgorithmPage = () => {
     ]
    } */
 
-  const [grandInput, setGrandInput] = useState<null | SchedulerInput>(null);
-  const [parsingError, setParsingError] = useState<null | unknown>(null);
+  const [grandInput, setGrandInput] = useState<SchedulerInput | undefined>();
+  const [parsingError, setParsingError] = useState<string | undefined>();
 
   useEffect(() => {
-    const argh = async () => {
+    const generateGrandInput = async () => {
       try {
         const personTypes: PersonType[] = [];
 
         for (const key of Object.keys(preset.personTypes)) {
           const personType: SetupPersonType = preset.personTypes[key];
 
-          const table = base.getTableByIdIfExists(personType.sourceTable);
+          const table = personType.sourceTable
+            ? base.getTableByIdIfExists(personType.sourceTable)
+            : null;
           const source = personType.sourceView
-            ? table.getViewByIdIfExists(personType.sourceView)
+            ? table?.getViewByIdIfExists(personType.sourceView)
             : table;
+
+          if (!table || !source) {
+            throw new Error(`Failed to get source for personType ${personType.name}`)
+          }
+
+          if (!personType.howManyTypePerCohort) {
+            throw new Error(`Missing howManyTypePerCohort for personType ${personType.name}`)
+          }
+
+          if (!personType.howManyCohortsPerType) {
+            throw new Error(`Missing howManyCohortsPerType for personType ${personType.name}`)
+          }
+
+          if (!personType.timeAvField) {
+            throw new Error(`Missing timeAvField for personType ${personType.name}`)
+          }
+
+          const peopleRecords = (await source.selectRecordsAsync({
+            fields: [
+              table.primaryField.id,
+              personType.timeAvField,
+              typeof personType.howManyCohortsPerType === "string" && personType.howManyCohortsPerType,
+            ],
+          })).records
 
           personTypes.push({
             name: personType.name,
             min: personType.howManyTypePerCohort[0],
             max: personType.howManyTypePerCohort[1],
-            people: (
-              await source.selectRecordsAsync({
-                fields: [
-                  table.primaryField.id,
-                  personType.timeAvField,
-                  typeof personType.howManyCohortsPerType === "string" &&
-                    personType.howManyCohortsPerType,
-                ].filter(Boolean),
-              })
-            ).records.map((r) => ({
+            people: peopleRecords.map((r) => ({
               id: r.id,
               name: r.getCellValueAsString(table.primaryField.id),
-              timeAv: parseTimeAvString(r.getCellValueAsString(personType.timeAvField)),
+              timeAv: parseTimeAvString(r.getCellValueAsString(personType.timeAvField!)),
               howManyCohorts:
                 typeof personType.howManyCohortsPerType === "string"
                   ? r.getCellValue(personType.howManyCohortsPerType) as number
-                  : personType.howManyCohortsPerType,
+                  : personType.howManyCohortsPerType!,
             })),
           });
         }
@@ -320,12 +326,12 @@ const AlgorithmPage = () => {
           personTypes,
         });
       } catch (e) {
-        setParsingError(e);
-        console.log(e);
+        console.error(e);
+        setParsingError(String(e));
       }
     };
 
-    argh();
+    generateGrandInput();
   }, [base, preset.lengthOfMeeting, preset.personTypes]);
 
   const [solution, setSolution] = useState<null | Cohort[]>(null);
@@ -343,17 +349,13 @@ const AlgorithmPage = () => {
           const t = cohort.time;
     
           return Object.keys(cohort.people).every((personTypeName) => {
-            const personType = grandInput.personTypes.find(
+            const personType = grandInput?.personTypes.find(
               (pt) => pt.name === personTypeName
             );
     
             return cohort.people[personTypeName].every((personID) => {
-              const timeAv = personType.people.find(
-                (person) => person.id === personID
-              ).timeAv;
-              return timeAv.some(
-                ([b, e]) => b <= t && t <= e - grandInput?.lengthOfMeeting
-              );
+              const timeAv = personType?.people?.find((person) => person.id === personID)?.timeAv ?? [];
+              return grandInput && timeAv.some(([b, e]) => b <= t && t <= e - grandInput.lengthOfMeeting);
             });
           });
         });
@@ -369,13 +371,13 @@ const AlgorithmPage = () => {
         })
       );
     }
-  }, [grandInput?.lengthOfMeeting, grandInput?.personTypes, solution]);
+  }, [grandInput, grandInput?.lengthOfMeeting, grandInput?.personTypes, solution]);
 
   return (
     <div>
       {parsingError ? (
         <div>
-          Parsing error: <pre>{JSON.stringify(parsingError, null, 2)}</pre>
+          Parsing error: {parsingError}
         </div>
       ) : !grandInput ? (
         "Loading..."

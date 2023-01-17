@@ -29,12 +29,12 @@ export type PersonType = {
   timeAvField?: string;
   cohortOverlapFullField?: string;
   cohortOverlapPartialField?: string;
-  howManyTypePerCohort?: number[];
+  howManyTypePerCohort?: [number, number];
   howManyCohortsPerType?: number | string;
   cohortsTableField?: string;
 };
 
-const createPersonType = () => ({
+const createPersonType = (): PersonType => ({
   name: "",
   sourceTable: "",
   sourceView: "",
