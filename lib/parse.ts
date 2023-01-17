@@ -79,7 +79,7 @@ export function parseInterval(interval: string): Interval {
   // e.g. U23:00 M00:00
   // So the end of the interval should be the end of the week
   if (beginning > end) {
-    if (beginning !== 0) {
+    if (end !== 0) {
       console.warn(`Wrapping around time [${beginning}, ${end}]. This shouldn't happen with good data.`)
     }
 

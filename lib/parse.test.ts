@@ -19,9 +19,9 @@ describe("parseInterval", () => {
         ["M00:00 M01:00", [0, 2]],
         ["M10:00 M15:00", [20, 30]],
         ["T00:00 R12:00", [48, 168]],
-        // todo: is this right?
         ["U23:30 M00:00", [335, 336]],
-        ["U23:30 M01:00", [335, 338]],
+        // truncates
+        ["U23:30 M01:00", [335, 336]],
     ])("%s -> %s", (interval, value) => {
         expect(parseInterval(interval)).toEqual(value)
     })
