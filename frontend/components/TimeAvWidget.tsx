@@ -1,5 +1,5 @@
 import React from "react";
-import { MINUTE_IN_HOUR, UNIT_MINUTES } from "../../lib/constants";
+import { MINUTE_IN_HOUR, MINUTES_IN_UNIT } from "../../lib/constants";
 import { prettyPrintTime } from "../../lib/format";
 import { Interval, unparseNumber } from "../../lib/parse";
 import { isWithin } from "../../lib/util";
@@ -28,7 +28,7 @@ export interface TimeAvWidgetProps {
 }
 
 export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
-  const multiplier = MINUTE_IN_HOUR / UNIT_MINUTES;
+  const multiplier = MINUTE_IN_HOUR / MINUTES_IN_UNIT;
 
   const allNumbers = zeroUntilN(7 * 24 * multiplier);
 

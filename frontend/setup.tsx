@@ -17,7 +17,7 @@ import {
 } from "@airtable/blocks/ui";
 import React, { useMemo, useState } from "react";
 import { Preset } from ".";
-import { MS_IN_MINUTE, MS_IN_WEEK, UNIT_MINUTES } from "../lib/constants";
+import { MS_IN_MINUTE, MS_IN_WEEK, MINUTES_IN_UNIT } from "../lib/constants";
 import { renderDuration } from "../lib/format";
 import { newUID } from "../lib/util";
 import { FixedNumberInput } from "./components/FixedNumberInput";
@@ -356,13 +356,13 @@ const SetupPage = () => {
               <FixedNumberInput
                 value={lengthOfMeeting}
                 increment={() =>
-                  setLengthOfMeeting((lengthOfMeeting as number) + UNIT_MINUTES)
+                  setLengthOfMeeting((lengthOfMeeting as number) + MINUTES_IN_UNIT)
                 }
                 decrement={() =>
                   setLengthOfMeeting(
                     Math.max(
-                      (lengthOfMeeting as number) - UNIT_MINUTES,
-                      UNIT_MINUTES
+                      (lengthOfMeeting as number) - MINUTES_IN_UNIT,
+                      MINUTES_IN_UNIT
                     )
                   )
                 }

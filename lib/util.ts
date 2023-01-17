@@ -1,5 +1,7 @@
 import { Interval } from "./parse";
 
+export type Brand<K, T> = K & { __brand: T }
+
 export async function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

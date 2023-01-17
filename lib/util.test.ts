@@ -1,3 +1,4 @@
+import { Interval } from './parse'
 import { combineIntervals } from './util'
 
 describe("combineIntervals", () => {
@@ -8,7 +9,7 @@ describe("combineIntervals", () => {
   })
 
   test("handles disjoint input", () => {
-    expect(combineIntervals([[[1, 2]], [[3, 4], [5, 6]]])).toEqual([
+    expect(combineIntervals([[[1, 2]], [[3, 4], [5, 6]]] as Interval[][])).toEqual([
       { count: 1, interval: [1, 2] },
       { count: 1, interval: [3, 4] },
       { count: 1, interval: [5, 6] },
@@ -16,7 +17,7 @@ describe("combineIntervals", () => {
   })
 
   test("handles two-overlapping input", () => {
-    expect(combineIntervals([[[1, 5]], [[2, 4], [6, 7]]])).toEqual([
+    expect(combineIntervals([[[1, 5]], [[2, 4], [6, 7]]] as Interval[][])).toEqual([
       { count: 1, interval: [1, 2] },
       { count: 2, interval: [2, 4] },
       { count: 1, interval: [4, 5] },
@@ -25,7 +26,7 @@ describe("combineIntervals", () => {
   })
 
   test("handles three-overlapping input", () => {
-    expect(combineIntervals([[[1, 5]], [[2, 6]], [[3, 4]]])).toEqual([
+    expect(combineIntervals([[[1, 5]], [[2, 6]], [[3, 4]]] as Interval[][])).toEqual([
       { count: 1, interval: [1, 2] },
       { count: 2, interval: [2, 3] },
       { count: 3, interval: [3, 4] },
