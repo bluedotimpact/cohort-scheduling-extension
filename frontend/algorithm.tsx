@@ -8,7 +8,7 @@ import {
   useGlobalConfig
 } from "@airtable/blocks/ui";
 import React, { useCallback, useEffect, useState } from "react";
-import { UNIT_MINUTES } from "../lib/constants";
+import { MINUTES_IN_UNIT } from "../lib/constants";
 import { getDateFromCoord } from "../lib/date";
 import { parseTimeAvString, unparseNumber } from "../lib/parse";
 import { Cohort, PersonType, SchedulerInput, solve } from "../lib/scheduler";
@@ -206,7 +206,7 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                       setSaving(true);
                       const records = solution.map((cohort) => {
                         const start = cohort.time;
-                        const end = cohort.time + preset.lengthOfMeeting / UNIT_MINUTES;
+                        const end = cohort.time + preset.lengthOfMeeting / MINUTES_IN_UNIT;
                         const fields: Record<FieldId, unknown> = {
                           [preset.cohortsTableStartDateField]: getDateFromCoord(
                             unparseNumber(start),
@@ -322,7 +322,7 @@ const AlgorithmPage = () => {
           });
         }
         setGrandInput({
-          lengthOfMeeting: preset.lengthOfMeeting / UNIT_MINUTES,
+          lengthOfMeeting: preset.lengthOfMeeting / MINUTES_IN_UNIT,
           personTypes,
         });
       } catch (e) {

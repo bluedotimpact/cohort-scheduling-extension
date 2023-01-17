@@ -1,3 +1,5 @@
+import { BDDateTime } from "./parse";
+
 export function thisMonday(date = new Date()) {
   const day = date.getDay();
   const diff = (day === 0 ? 6 : day - 1) * 24 * 60 * 60 * 1000;
@@ -9,11 +11,11 @@ export function thisMonday(date = new Date()) {
   return newDate;
 }
 
-export function dateShiftBy(date: Date, ms: number) {
+export function dateShiftBy(date: Date, ms: number): Date {
   return new Date(date.getTime() + ms);
 }
 
-export function getDateFromCoord({ day, hour, minute }, anchorDate): Date {
+export function getDateFromCoord({ day, hour, minute }: BDDateTime, anchorDate: Date): Date {
   const anchor = thisMonday(anchorDate);
   const ms = (day * 24 + hour) * 60 * 60 * 1000 + minute * 60 * 1000;
   return dateShiftBy(anchor, ms);
