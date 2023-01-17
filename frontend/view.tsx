@@ -13,10 +13,10 @@ import {
 } from "@airtable/blocks/ui";
 import React, { useEffect, useState } from "react";
 import { Preset } from ".";
-import { UNIT_MINUTES } from "../lib/constants";
+import { MINUTES_IN_UNIT } from "../lib/constants";
 import { dateToCoord } from "../lib/date";
 import { prettyPrintDayTime } from "../lib/format";
-import { Interval, parseDayTime, parseTimeAvString, unparseNumber } from "../lib/parse";
+import { Interval, parseDayTime, parseTimeAvString, Unit, unparseNumber } from "../lib/parse";
 import { Cohort } from "../lib/scheduler";
 import { combineIntervals } from "../lib/util";
 import { CohortBlob, PersonBlob } from "./components/Blobs";
@@ -241,7 +241,7 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
   }, {})
 
   const agreedTime: TimeAvWidgetProps["availabilities"][number] = {
-    intervals: [[cohort.time, cohort.time + preset.lengthOfMeeting / UNIT_MINUTES]],
+    intervals: [[cohort.time, cohort.time + preset.lengthOfMeeting / MINUTES_IN_UNIT as Unit]],
     class: "bg-purple-500",
   }
   const availabilities: TimeAvWidgetProps["availabilities"] = hoveredPerson
@@ -263,7 +263,7 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
         <div>
           {prettyPrintDayTime(unparseNumber(cohort.time))} —{" "}
           {prettyPrintDayTime(
-            unparseNumber(cohort.time + preset.lengthOfMeeting / UNIT_MINUTES)
+            unparseNumber(cohort.time + preset.lengthOfMeeting / MINUTES_IN_UNIT)
           )}
         </div>
       </div>

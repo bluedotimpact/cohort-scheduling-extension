@@ -1,4 +1,5 @@
 import GLPK, { LP, Options } from "glpk.js";
+import { Unit } from "./parse";
 
 export interface SchedulerInput {
   lengthOfMeeting: number,
@@ -20,7 +21,7 @@ export interface Person {
 }
 
 export interface Cohort {
-  time: number,
+  time: Unit,
   /** Map from person type name -> person id */
   people: { [personType: string]: string[] },
 }
@@ -180,7 +181,7 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
     const largeCohorts: Cohort[] = [];
     for (const t of Object.keys(timeslots)) {
       largeCohorts.push({
-        time: parseInt(t),
+        time: parseInt(t) as Unit,
         people: timeslots[t],
       });
     }
