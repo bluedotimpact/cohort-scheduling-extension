@@ -54,11 +54,12 @@ const ViewPerson = ({ tableId, recordId }) => {
   });
   const allCohorts = rawCohorts.map((cohort) => {
     const meetingDates = [
-      new Date(
-        cohort.getCellValue(preset.cohortsTableStartDateField) as string
-      ),
-      new Date(cohort.getCellValue(preset.cohortsTableEndDateField) as string),
+      new Date(cohort.getCellValueAsString(preset.cohortsTableStartDateField)),
+      new Date(cohort.getCellValueAsString(preset.cohortsTableEndDateField)),
     ];
+
+    // Meeting interval
+    // e.g. M10:00 M11:30
     const timeAv = meetingDates
       .map(dateToCoord)
       .map(prettyPrintDayTime)
@@ -66,9 +67,9 @@ const ViewPerson = ({ tableId, recordId }) => {
     return {
       id: cohort.id,
       name: cohort.name,
-      timeAv,
+      timeAv: meetingDates.some(d => isNaN(d.getTime())) ? null : timeAv,
     };
-  });
+  }).filter(c => c.timeAv);
 
   const cohortsFull = allCohorts.filter((cohort) => {
     const [[mb, me]] = parseTimeAvString(cohort.timeAv);
