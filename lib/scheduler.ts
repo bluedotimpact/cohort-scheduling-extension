@@ -26,8 +26,8 @@ export interface Cohort {
   people: { [personType: string]: string[] },
 }
 
-const toBinary = (personType: PersonType, person: Person, t: number): string => `${personType.name}-${person.id}-${t}`;
-const fromBinary = (binary: string): [string, string, string] => binary.split("-") as [string, string, string];
+const toBinary = (personType: PersonType, person: Person, t: number): string => JSON.stringify([personType.name, person.id, t.toString()]);
+const fromBinary = (binary: string): [string, string, string] => JSON.parse(binary);
 
 const getCohortCount = (t: number): string => `cohortCount-${t}`;
 
@@ -38,6 +38,7 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
   const options: Options = {
     msglev: glpk.GLP_MSG_ALL,
     presol: true,
+    tmlim: 15,
     cb: {
       call: (progress) => {
         console.log("progress", progress);
