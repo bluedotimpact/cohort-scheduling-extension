@@ -34,20 +34,25 @@ const OtherPage = () => {
       preset.cohortsTableEndDateField,
     ],
   });
-  const allCohorts = rawCohorts.map((cohort) => {
+  const cohortsWithTimes = rawCohorts.flatMap((cohort) => {
     const meetingDates = [
-      new Date(cohort.getCellValueAsString(preset.cohortsTableStartDateField)),
-      new Date(cohort.getCellValueAsString(preset.cohortsTableEndDateField)),
+      // getCellValueAsString returns something that can't be parsed by the date constructor
+      // this returns an ISO timestamp that can
+      new Date(cohort.getCellValue(preset.cohortsTableStartDateField) as string),
+      new Date(cohort.getCellValue(preset.cohortsTableEndDateField) as string),
     ];
+    if (meetingDates.some(v => isNaN(v.getTime()))) {
+      return []
+    }
     const timeAv = meetingDates
       .map(dateToCoord)
       .map(prettyPrintDayTime)
       .join(" ");
-    return {
+    return [{
       id: cohort.id,
       name: cohort.name,
       timeAv,
-    };
+    }];
   });
 
   const [recalculating, setRecalculating] = useState(false);
@@ -66,7 +71,7 @@ const OtherPage = () => {
 
         const fields = {};
         if (personType.cohortOverlapFullField) {
-          fields[personType.cohortOverlapFullField] = allCohorts
+          fields[personType.cohortOverlapFullField] = cohortsWithTimes
             .filter((cohort) => {
               const [[mb, me]] = parseTimeAvString(cohort.timeAv);
               return parsedTimeAv.some(([b, e]) => mb >= b && me <= e);
@@ -75,7 +80,7 @@ const OtherPage = () => {
         }
 
         if (personType.cohortOverlapPartialField) {
-          fields[personType.cohortOverlapPartialField] = allCohorts
+          fields[personType.cohortOverlapPartialField] = cohortsWithTimes
             .filter((cohort) => {
               const [[mb, me]] = parseTimeAvString(cohort.timeAv);
               return parsedTimeAv.some(
