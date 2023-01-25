@@ -52,10 +52,12 @@ const ViewPerson = ({ tableId, recordId }) => {
       preset.cohortsTableEndDateField,
     ],
   });
-  const allCohorts = rawCohorts.map((cohort) => {
+  const cohortsWithTimes = rawCohorts.map((cohort) => {
     const meetingDates = [
-      new Date(cohort.getCellValueAsString(preset.cohortsTableStartDateField)),
-      new Date(cohort.getCellValueAsString(preset.cohortsTableEndDateField)),
+      // getCellValueAsString returns something that can't be parsed by the date constructor
+      // this returns an ISO timestamp that can
+      new Date(cohort.getCellValue(preset.cohortsTableStartDateField) as string),
+      new Date(cohort.getCellValue(preset.cohortsTableEndDateField) as string),
     ];
 
     // Meeting interval
@@ -71,12 +73,12 @@ const ViewPerson = ({ tableId, recordId }) => {
     };
   }).filter(c => c.timeAv);
 
-  const cohortsFull = allCohorts.filter((cohort) => {
+  const cohortsFull = cohortsWithTimes.filter((cohort) => {
     const [[mb, me]] = parseTimeAvString(cohort.timeAv);
     return timeAv.some(([b, e]) => mb >= b && me <= e);
   });
 
-  const cohortsPartial = allCohorts.filter((cohort) => {
+  const cohortsPartial = cohortsWithTimes.filter((cohort) => {
     const [[mb, me]] = parseTimeAvString(cohort.timeAv);
     return timeAv.some(
       ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)

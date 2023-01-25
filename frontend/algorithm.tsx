@@ -1,9 +1,12 @@
+import AirtableRecord from "@airtable/blocks/dist/types/src/models/record";
 import { FieldId } from "@airtable/blocks/dist/types/src/types/field";
 import {
   Button,
   Dialog,
+  expandRecord,
   Heading,
   Loader,
+  Text,
   useBase,
   useGlobalConfig
 } from "@airtable/blocks/ui";
@@ -265,7 +268,7 @@ const AlgorithmPage = () => {
    } */
 
   const [grandInput, setGrandInput] = useState<SchedulerInput | undefined>();
-  const [parsingError, setParsingError] = useState<string | undefined>();
+  const [parsingError, setParsingError] = useState<Error | undefined>();
 
   useEffect(() => {
     const generateGrandInput = async () => {
@@ -310,24 +313,34 @@ const AlgorithmPage = () => {
             name: personType.name,
             min: personType.howManyTypePerCohort[0],
             max: personType.howManyTypePerCohort[1],
-            people: peopleRecords.map((r) => ({
-              id: r.id,
-              name: r.getCellValueAsString(table.primaryField.id),
-              timeAv: parseTimeAvString(r.getCellValueAsString(personType.timeAvField!)),
-              howManyCohorts:
-                typeof personType.howManyCohortsPerType === "string"
-                  ? r.getCellValue(personType.howManyCohortsPerType) as number
-                  : personType.howManyCohortsPerType!,
-            })),
+            people: peopleRecords.map((record) => {
+              try {
+                return {
+                  id: record.id,
+                  name: record.getCellValueAsString(table.primaryField.id),
+                  timeAv: parseTimeAvString(record.getCellValueAsString(personType.timeAvField!)),
+                  howManyCohorts:
+                  typeof personType.howManyCohortsPerType === "string"
+                    ? record.getCellValue(personType.howManyCohortsPerType) as number
+                    : personType.howManyCohortsPerType!,
+                }
+              } catch (throwable: unknown) {
+                const prefix = `In processing person "${record.name}" (${record.id}): `;
+                const error: Error = throwable instanceof Error ? throwable : new Error(String(throwable))
+                error.message = prefix + error.message;
+                (error as { record?: unknown }).record = record;
+                throw error;
+              }
+            }),
           });
         }
         setGrandInput({
           lengthOfMeeting: preset.lengthOfMeeting / MINUTES_IN_UNIT,
           personTypes,
         });
-      } catch (e) {
-        console.error(e);
-        setParsingError(String(e));
+      } catch (err) {
+        console.error(err);
+        setParsingError(err instanceof Error ? err : new Error(String(err)));
       }
     };
 
@@ -376,9 +389,12 @@ const AlgorithmPage = () => {
   return (
     <div>
       {parsingError ? (
-        <div>
-          Parsing error: {parsingError}
-        </div>
+        <Text className="text-red-500">
+          Parsing error: {parsingError.message}
+          {("record" in parsingError) && <> (<span className="text-blue-500 cursor-pointer" onClick={() => {
+            expandRecord(parsingError.record as AirtableRecord)
+          }}>view record</span>)</>}
+        </Text>
       ) : !grandInput ? (
         "Loading..."
       ) : (
@@ -431,7 +447,7 @@ const AlgorithmPage = () => {
               {checking
                 ? "Checking solution..."
                 : checked
-                ? "Everyone can meet with their cohort!"
+                ? "Solution checked."
                 : ""}
             </div>
           </div>
@@ -448,7 +464,7 @@ const AlgorithmPage = () => {
               />
             )
           )}
-          {error && <div>{JSON.stringify(error, null, 2)}</div>}
+          {error && <div>Error: {error instanceof Error ? error.message : JSON.stringify(error, null, 2)}</div>}
         </div>
       )}
     </div>

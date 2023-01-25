@@ -14,7 +14,7 @@ import {
 } from "@airtable/blocks/ui";
 import { Tab } from "@headlessui/react";
 import React, { Fragment, useMemo, useState } from "react";
-import { thisMonday } from "../lib/date";
+import { thisMondayUtc } from "../lib/date";
 import { newUID } from "../lib/util";
 import AlgorithmPage from "./algorithm";
 import OtherPage from "./other";
@@ -34,7 +34,7 @@ export type Preset = {
 const createPreset = (name: string) => ({
   name,
   lengthOfMeeting: 90,
-  firstWeek: thisMonday().getTime(),
+  firstWeek: thisMondayUtc().getTime(),
   personTypes: [],
 });
 
@@ -61,10 +61,10 @@ const PresetChooser = () => {
 
   return (
     <div className="flex items-center">
-      Change preset:
-      <div className="w-2" />
+      <span className="hidden sm:block mr-2">Preset:</span>
       <div>
         <Select
+          className="min-w-[5rem] rounded-r-none"
           options={[
             ...(presetOptions || []),
             { label: "+ Create new preset", value: "new" },
@@ -159,17 +159,17 @@ function App() {
         personType.cohortsTableField
     ));
 
-  console.error(preset.personTypes)
+  const showDeletePreset = Object.keys(globalConfig.get("presets")).length > 1
 
   return (
-    <>
+    <main className="bg-slate-50 min-h-screen">
       <Tab.Group>
-        <Tab.List className="h-9 p-1 w-full flex items-center justify-between bg-slate-500">
+        <Tab.List className="p-1 w-auto flex gap-2 sm:gap-4 overflow-x-auto items-center justify-between bg-slate-500">
           <div className="flex items-center">
             <MyTabLink icon="settings" label="Setup" />
             {isConfigured && (
               <>
-                <MyTabLink icon="shapes" label="Algorithm" />
+                <MyTabLink icon="shapes" label="Algo" />
                 <MyTabLink icon="show1" label="View" />
                 <MyTabLink icon="lightbulb" label="Other"></MyTabLink>
               </>
@@ -179,14 +179,14 @@ function App() {
             <PresetChooser />
             <Button
               icon="edit"
-              className="text-gray-400"
+              className={`bg-slate-200 text-slate-700 h-7 rounded-l-none border-solid border border-y-0 border-r-0 ${showDeletePreset ? "rounded-none" : ""}`}
               onClick={() => setEditPresetDialogOpen(true)}
               aria-label="Edit preset"
             ></Button>
-            {Object.keys(globalConfig.get("presets")).length > 1 && (
+            {showDeletePreset && (
               <Button
                 icon="trash"
-                className="text-gray-400"
+                className="bg-slate-200 text-slate-700 h-7 rounded-l-none border-solid border border-y-0 border-r-0 border-slate-700"
                 onClick={async () => {
                   closeEditPresetDialog();
                   await globalConfig.setAsync(
@@ -204,7 +204,7 @@ function App() {
             )}
           </div>
         </Tab.List>
-        <Tab.Panels className="py-4 px-6 bg-slate-50 min-h-screen h-full">
+        <Tab.Panels className="p-4 sm:p-6">
           <Tab.Panel>
             <SetupPage />
           </Tab.Panel>
@@ -252,7 +252,7 @@ function App() {
           </div>
         </Dialog>
       )}
-    </>
+    </main>
   );
 }
 

@@ -1,5 +1,7 @@
+import Record from "@airtable/blocks/dist/types/src/models/record";
 import {
   Button,
+  expandRecord,
   Heading,
   Loader,
   Text,
@@ -55,58 +57,72 @@ const OtherPage = () => {
     }];
   });
 
-  const [recalculating, setRecalculating] = useState(false);
+  const [recalculating, setRecalculating] = useState<boolean>(false);
+  const [error, setError] = useState<Error | undefined>(undefined);
   const recalculateOverlap = async () => {
-    for (const personType of configuredPersonTypes) {
-      console.log("updating", personType.name);
+    try {
+      setError(undefined);
+      for (const personType of configuredPersonTypes) {
+        console.log("updating", personType.name);
 
-      const table = base.getTableByIdIfExists(personType.sourceTable);
+        const table = base.getTableByIdIfExists(personType.sourceTable);
 
-      const records = (await table.selectRecordsAsync()).records;
-      const updatedRecords = [];
-      for (const record of records) {
-        const parsedTimeAv = parseTimeAvString(
-          record.getCellValueAsString(personType.timeAvField)
-        );
+        const records = (await table.selectRecordsAsync()).records;
+        const updatedRecords = [];
+        for (const record of records) {
+          try {
+            const parsedTimeAv = parseTimeAvString(
+              record.getCellValueAsString(personType.timeAvField)
+            );
 
-        const fields = {};
-        if (personType.cohortOverlapFullField) {
-          fields[personType.cohortOverlapFullField] = cohortsWithTimes
-            .filter((cohort) => {
-              const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-              return parsedTimeAv.some(([b, e]) => mb >= b && me <= e);
-            })
-            .map(({ id }) => ({ id }));
+            const fields = {};
+            if (personType.cohortOverlapFullField) {
+              fields[personType.cohortOverlapFullField] = cohortsWithTimes
+                .filter((cohort) => {
+                  const [[mb, me]] = parseTimeAvString(cohort.timeAv);
+                  return parsedTimeAv.some(([b, e]) => mb >= b && me <= e);
+                })
+                .map(({ id }) => ({ id }));
+            }
+
+            if (personType.cohortOverlapPartialField) {
+              fields[personType.cohortOverlapPartialField] = cohortsWithTimes
+                .filter((cohort) => {
+                  const [[mb, me]] = parseTimeAvString(cohort.timeAv);
+                  return parsedTimeAv.some(
+                    ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)
+                  );
+                })
+                .map(({ id }) => ({ id }));
+            }
+
+            const newRecord = {
+              id: record.id,
+              fields,
+            };
+            updatedRecords.push(newRecord);
+          } catch (throwable: unknown) {
+            const prefix = `In processing person "${record.name}" (${record.id}): `;
+            const error: Error = throwable instanceof Error ? throwable : new Error(String(throwable))
+            error.message = prefix + error.message;
+            (error as { record?: Record }).record = record;
+            throw error;
+          }
         }
-
-        if (personType.cohortOverlapPartialField) {
-          fields[personType.cohortOverlapPartialField] = cohortsWithTimes
-            .filter((cohort) => {
-              const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-              return parsedTimeAv.some(
-                ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)
-              );
-            })
-            .map(({ id }) => ({ id }));
+        const chunkSize = 49;
+        for (let i = 0; i < updatedRecords.length; i += chunkSize) {
+          await table.updateRecordsAsync(updatedRecords.slice(i, i + chunkSize));
         }
-
-        const newRecord = {
-          id: record.id,
-          fields,
-        };
-        updatedRecords.push(newRecord);
       }
-      const chunkSize = 49;
-      for (let i = 0; i < updatedRecords.length; i += chunkSize) {
-        await table.updateRecordsAsync(updatedRecords.slice(i, i + chunkSize));
-      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err : new Error(String(err)))
     }
   };
 
   return (
     <div className="space-y-2">
       <Heading>Cohort overlap</Heading>
-      <Text width="400px">
+      <Text>
         For each configured person type, this will recalculate their cohort
         overlap field and save/update the result in the table.
       </Text>
@@ -114,8 +130,9 @@ const OtherPage = () => {
         In your case, the following person types are configured:{" "}
         {configuredPersonTypes.map(({ name }) => name).join(", ")}.
       </Text>
-      <div className="flex items-center space-x-2">
-        <Button
+      {recalculating
+        ? <Loader />
+        : <Button
           //@ts-ignore
           type="asdf"
           variant="primary"
@@ -126,9 +143,13 @@ const OtherPage = () => {
           }}
         >
           Recalculate
-        </Button>
-        {recalculating && <Loader />}
-      </div>
+        </Button>}
+      {error && <Text className="text-red-500">
+        Error: {error.message}
+        {("record" in error) && <> (<span className="text-blue-500 cursor-pointer" onClick={() => {
+          expandRecord(error.record as Record)
+        }}>view record</span>)</>}
+      </Text>}
     </div>
   );
 };

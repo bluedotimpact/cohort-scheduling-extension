@@ -3,24 +3,21 @@
         "start": "npm run start:software",
         "start:software": "block run --remote software",
         "start:agisf_jan23": "block run --remote agisf_jan23",
-        "release": "npm run release:software",
-        "release:software": "block release --remote software",
-        "release:agisf_jan23": "block release --remote agisf_jan23",
-        "build": "npm run type-check",
         "type-check": "tsc --noEmit --esModuleInterop --jsx react frontend/**.tsx lib/**.ts",
         "test": "jest",
         "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend lib",
-        "postinstall": "patch-package"
+        "postinstall": "patch-package",
+        "deploy": "node deploy.js"
     },
     "dependencies": {
-        "@airtable/blocks": "1.15.0",
+        "@airtable/blocks": "^1.17.0",
         "@headlessui/react": "^1.7.7",
         "glpk.js": "^4.0.1",
         "react": "^16.14.0",
         "react-dom": "^16.14.0"
     },
     "devDependencies": {
-        "@airtable/blocks-cli": "^2.0.2",
+        "@airtable/blocks-cli": "^2.0.3",
         "@types/jest": "^29.2.5",
         "@typescript-eslint/eslint-plugin": "^5.48.1",
         "@typescript-eslint/parser": "^5.48.1",
