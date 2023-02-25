@@ -14,7 +14,7 @@ import {
 } from "@airtable/blocks/ui";
 import { Tab } from "@headlessui/react";
 import React, { Fragment, useMemo, useState } from "react";
-import { thisMonday } from "../lib/date";
+import { thisMondayUtc } from "../lib/date";
 import { newUID } from "../lib/util";
 import AlgorithmPage from "./algorithm";
 import OtherPage from "./other";
@@ -34,7 +34,7 @@ export type Preset = {
 const createPreset = (name: string) => ({
   name,
   lengthOfMeeting: 90,
-  firstWeek: thisMonday().getTime(),
+  firstWeek: thisMondayUtc().getTime(),
   personTypes: [],
 });
 
