@@ -17,7 +17,7 @@ To start developing this extension:
 1. Clone this git repository
 2. Install [Node.js](https://nodejs.org/)
 3. Run `npm install`
-4. Run `npm start` (for the 'Bucketing Extension Base' in the BlueDot Impact software AirTable account)
+4. Run `npm start` (for the '[local] Scheduling Extension' in the BlueDot Impact software AirTable account)
 5. Load the relevant base
 6. Make changes to the code and see them reflected in the app!
 

@@ -106,7 +106,7 @@ const OtherPage = () => {
   return (
     <div className="space-y-2">
       <Heading>Cohort overlap</Heading>
-      <Text width="400px">
+      <Text>
         For each configured person type, this will recalculate their cohort
         overlap field and save/update the result in the table.
       </Text>

@@ -348,11 +348,8 @@ const SetupPage = () => {
       <div className="space-y-3">
         <div>
           <Heading>General settings</Heading>
-          <div className="flex w-full">
-            <FormField
-              className="w-1/2"
-              label="Length of meeting (only 30min increments)"
-            >
+          <div className="grid sm:grid-cols-2 gap-1">
+            <FormField label="Meeting length">
               <FixedNumberInput
                 value={lengthOfMeeting}
                 increment={() =>
@@ -369,7 +366,7 @@ const SetupPage = () => {
                 render={(l) => renderDuration(l * MS_IN_MINUTE)}
               />
             </FormField>
-            <FormField className="w-1/2" label="First week of meetings">
+            <FormField label="First week of meetings">
               <FixedNumberInput
                 value={firstWeek}
                 increment={() =>
@@ -395,7 +392,6 @@ const SetupPage = () => {
           <FormField label="Cohorts table">
             <TablePickerSynced
               globalConfigKey={[...path, "cohortsTable"]}
-              width="300px"
               onChange={() => {
                 globalConfig.setPathsAsync([
                   {
@@ -408,19 +404,17 @@ const SetupPage = () => {
             />
           </FormField>
           {cohortsTable && (
-            <div className="flex space-x-2">
-              <FormField label="Cohorts table start date field">
+            <div className="grid sm:grid-cols-2 gap-1">
+              <FormField label="Start date field">
                 <FieldPickerSynced
                   table={cohortsTable}
                   globalConfigKey={[...path, "cohortsTableStartDateField"]}
-                  width="300px"
                 />
               </FormField>
-              <FormField label="Cohorts table end date field">
+              <FormField label="End date field">
                 <FieldPickerSynced
                   table={cohortsTable}
                   globalConfigKey={[...path, "cohortsTableEndDateField"]}
-                  width="300px"
                 />
               </FormField>
             </div>
