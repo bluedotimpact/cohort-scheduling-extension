@@ -80,8 +80,8 @@ const PersonTypeComp = (props) => {
 
   return (
     <>
-      <div className="flex justify-between items-center px-3 py-1 border bg-white rounded shadow">
-        <div className="flex items-center w-56">
+      <div className="flex justify-between items-center px-2 py-1 gap-1 border bg-white rounded shadow">
+        <div className="flex flex-1 items-center w-24">
           <div>
             <div className="text-slate-700 font-semibold">
               {personType.name}
@@ -92,28 +92,26 @@ const PersonTypeComp = (props) => {
               </div>
             )}
           </div>
-          <div className="w-2" />
         </div>
-        <div className="w-4" />
         <div className="flex items-center w-1/2 space-x-2">
-          <div className="text-gray-400">
+          <div className="hidden sm:block text-gray-400">
             <Icon size={16} name="link1" />
           </div>
           <FieldPickerSynced
             table={cohortsTable}
-            placeholder="Pick a cohorts table linked reference field..."
+            placeholder="Pick cohort link field..."
             globalConfigKey={[...path, "cohortsTableField"]}
           />
         </div>
-        <div className="flex ml-3">
+        <div className="flex">
           <Button
-            className="text-gray-600"
+            className="px-2 text-gray-600 hover:bg-slate-200 hover:text-gray-800"
             icon="edit"
             onClick={() => setIsEditDialogOpen(true)}
             aria-label="Edit person type"
           />
           <Button
-            className="text-gray-600"
+            className="px-2 text-gray-600 hover:bg-slate-200 hover:text-gray-800"
             icon="trash"
             onClick={() => setIsTrashDialogOpen(true)}
             aria-label="Delete person type"
@@ -150,7 +148,7 @@ const PersonTypeComp = (props) => {
 
           <div className="divide-y">
             <div className="py-2 w-1/2">
-              <FormField label="Singular name (just for bookkeeping purposes)">
+              <FormField label="Name">
                 <InputSynced globalConfigKey={[...path, "name"]}></InputSynced>
               </FormField>
             </div>
@@ -422,12 +420,12 @@ const SetupPage = () => {
         </div>
         <div>
           <div className="flex space-x-2 items-center">
-            <Heading>Types of people</Heading>
+            <Heading>Person types</Heading>
             <div className="text-xs text-gray-500">
               {Object.keys(preset.personTypes).length === 0
-                ? "Please add at least one person type"
+                ? "Please add at least one type"
                 : !typesOfPeopleConfigured &&
-                  "Please finish configuring the person types"}
+                  "Please finish configuring the types"}
             </div>
           </div>
           <div className="pl-1 space-y-1">

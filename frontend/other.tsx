@@ -115,19 +115,20 @@ const OtherPage = () => {
         {configuredPersonTypes.map(({ name }) => name).join(", ")}.
       </Text>
       <div className="flex items-center space-x-2">
-        <Button
-          //@ts-ignore
-          type="asdf"
-          variant="primary"
-          onClick={async () => {
-            setRecalculating(true);
-            await recalculateOverlap();
-            setRecalculating(false);
-          }}
-        >
-          Recalculate
-        </Button>
-        {recalculating && <Loader />}
+        {recalculating
+          ? <Loader />
+          : <Button
+            //@ts-ignore
+            type="asdf"
+            variant="primary"
+            onClick={async () => {
+              setRecalculating(true);
+              await recalculateOverlap();
+              setRecalculating(false);
+            }}
+          >
+            Recalculate
+          </Button>}
       </div>
     </div>
   );
