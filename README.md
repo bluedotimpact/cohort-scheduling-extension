@@ -1,4 +1,4 @@
-# Cohort scheduling extension
+# cohort-scheduling-extension ![deployment manual](https://img.shields.io/badge/deployment-manual-critical)
 
 Airtable extension for flexibly finding overlapping cohorts from people's time availability. Integrates with data from the [Time availability from](https://github.com/bluedot-impact-software/time-availability-form).
 
