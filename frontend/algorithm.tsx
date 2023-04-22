@@ -1,4 +1,4 @@
-import Record from "@airtable/blocks/dist/types/src/models/record";
+import AirtableRecord from "@airtable/blocks/dist/types/src/models/record";
 import { FieldId } from "@airtable/blocks/dist/types/src/types/field";
 import {
   Button,
@@ -328,7 +328,7 @@ const AlgorithmPage = () => {
                 const prefix = `In processing person "${record.name}" (${record.id}): `;
                 const error: Error = throwable instanceof Error ? throwable : new Error(String(throwable))
                 error.message = prefix + error.message;
-                (error as { record?: Record }).record = record;
+                (error as { record?: unknown }).record = record;
                 throw error;
               }
             }),
@@ -392,7 +392,7 @@ const AlgorithmPage = () => {
         <Text className="text-red-500">
           Parsing error: {parsingError.message}
           {("record" in parsingError) && <> (<span className="text-blue-500 cursor-pointer" onClick={() => {
-            expandRecord(parsingError.record as Record)
+            expandRecord(parsingError.record as AirtableRecord)
           }}>view record</span>)</>}
         </Text>
       ) : !grandInput ? (
