@@ -33,12 +33,23 @@ const getCohortCount = (t: number): string => `cohortCount-${t}`;
 
 // See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
 export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): Promise<null | Cohort[]> {
+  const personTypeNames = new Set();
+  personTypes.forEach(({ name }) => {
+    if (personTypeNames.has(name)) {
+      throw new Error("Duplicate person type name: " + name)
+    }
+    personTypeNames.add(name);
+  })
+  
+  const personCount = personTypes.map(p => p.people.length).reduce((acc, cur) => acc + cur, 0)
+  const timeLimitSeconds = Math.min(Math.max(personCount * 0.5, 5), 30)
+
   const glpk = await GLPK();
 
   const options: Options = {
     msglev: glpk.GLP_MSG_ALL,
     presol: true,
-    tmlim: 15,
+    tmlim: timeLimitSeconds,
     cb: {
       call: (progress) => {
         console.log("progress", progress);

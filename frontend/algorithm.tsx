@@ -447,7 +447,7 @@ const AlgorithmPage = () => {
               {checking
                 ? "Checking solution..."
                 : checked
-                ? "Everyone can meet with their cohort!"
+                ? "Solution checked."
                 : ""}
             </div>
           </div>
@@ -464,7 +464,7 @@ const AlgorithmPage = () => {
               />
             )
           )}
-          {error && <div>{JSON.stringify(error, null, 2)}</div>}
+          {error && <div>Error: {error instanceof Error ? error.message : JSON.stringify(error, null, 2)}</div>}
         </div>
       )}
     </div>
