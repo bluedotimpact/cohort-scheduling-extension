@@ -1,4 +1,4 @@
-# cohort-scheduling-extension ![deployment manual](https://img.shields.io/badge/deployment-manual-critical)
+# cohort-scheduling-extension ![deployment automatic](https://img.shields.io/badge/deployment-automatic-success)
 
 Airtable extension for flexibly finding overlapping cohorts from people's time availability. Integrates with data from the [Time availability from](https://github.com/bluedot-impact-software/time-availability-form).
 
@@ -23,6 +23,6 @@ To start developing this extension:
 
 If the changes don't appear to be updating the app, try clicking the extension name then 'Edit extension', then pasting in the server address printed to the console from step 4 (probably `https://localhost:9000`).
 
-Release new versions using `npm run release`. If you get the error `airtableApiBlockNotFound`, set up the block CLI with `npx block set-api-key`, getting your API key from the [AirTable account settings page](https://airtable.com/account).
+Changes merged into the default branch will automatically be deployed. You can manually deploy new versions using `npm run deploy`. If you get the error `airtableApiBlockNotFound`, set up the block CLI with `npx block set-api-key` with a [personal access token](https://airtable.com/developers/web/guides/personal-access-tokens).
 
 If you want to install this on a new base see [these instructions](https://www.airtable.com/developers/apps/guides/run-in-multiple-bases).
