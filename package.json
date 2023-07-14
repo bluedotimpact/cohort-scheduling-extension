@@ -2,7 +2,7 @@
     "scripts": {
         "start": "npm run start:software",
         "start:software": "block run --remote software",
-        "start:agisf_jan23": "block run --remote agisf_jan23",
+        "start:course_runner": "block run --remote course_runner",
         "type-check": "tsc --noEmit --esModuleInterop --jsx react frontend/**.tsx lib/**.ts",
         "test": "jest",
         "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend lib",
