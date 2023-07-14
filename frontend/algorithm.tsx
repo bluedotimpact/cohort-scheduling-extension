@@ -129,9 +129,9 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
             {personTypes.map((personType) => {
               const usedPeople = solution.map(cohort => cohort.people[personType.name]).flat();
               const unusedPeople = personType.people.filter((person) => !usedPeople.includes(person.id));
-              return (<div>
+              return (<div key={personType.name}>
                 <div className="w-24">{personType.name}s:</div>
-                <div key={personType.name} className="flex items-center">
+                <div className="flex items-center">
                   <div className="flex flex-wrap p-1 w-full bg-white rounded-sm border gap-1">
                     {unusedPeople.length === 0
                       ? "None"
