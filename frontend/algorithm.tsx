@@ -72,13 +72,13 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
         <div className="w-full rounded border border-solid border-gray-200">
           <div className="flex bg-slate-100 py-1 font-medium">
             {personTypes.map((personType) => {
-              const avgSize = (personType.min + personType.max) / 2;
+              const avgSize = 100 * (personType.min + personType.max) / 2;
 
               return (
                 <div
                   key={personType.name}
-                  className="text-center"
-                  style={{ flex: `${avgSize} 1 0` }}
+                  className="text-center px-1"
+                  style={{ flex: `0 1 ${avgSize}%`, minWidth: '80px' }}
                 >
                   {personType.name}
                 </div>
@@ -93,20 +93,17 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                   className="flex items-center py-1 cursor-pointer hover:bg-slate-50 hover:text-gray-600"
                   onClick={() => setViewedCohortIndex(i)}
                 >
-                  <div className="w-4 text-center text-xs text-gray-400">
-                    {i + 1}
-                  </div>
                   {Object.keys(cohort.people).map((personTypeName) => {
                     const personType = personTypes.find((pt: PersonType) => pt.name === personTypeName);
                     if (!personType) throw new Error('Person type in cohort but not configured');
 
-                    const avgSize = (personType.min + personType.max) / 2;
+                    const avgSize = 100 * (personType.min + personType.max) / 2;
 
                     return (
                       <div
                         key={personType.name}
-                        className="flex space-x-1"
-                        style={{ flex: `${avgSize} 1 0` }}
+                        className="flex flex-wrap gap-1 px-1"
+                        style={{ flex: `0 1 ${avgSize}%`, minWidth: '80px' }}
                       >
                         {cohort.people[personTypeName].map((personID) => {
                           return (
@@ -127,22 +124,22 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
         <div className="h-2" />
         <div>
           <div className="text-md font-semibold">Unused people</div>
+          <div className="h-2" />
           <div className="space-y-2">
             {personTypes.map((personType) => {
               const usedPeople = solution.map(cohort => cohort.people[personType.name]).flat();
               const unusedPeople = personType.people.filter((person) => !usedPeople.includes(person.id));
-              return (
+              return (<div>
+                <div className="w-24">{personType.name}s:</div>
                 <div key={personType.name} className="flex items-center">
-                  <div className="w-24">{personType.name}s:</div>
-                  {unusedPeople.length === 0 ? (
-                    <div>None</div>
-                  ) : (
-                    <div className="flex flex-wrap p-1 w-full bg-white rounded-sm border space-x-1">
-                      {unusedPeople.map((person) => <PersonBlob key={person.id} name={person.name} />)}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap p-1 w-full bg-white rounded-sm border gap-1">
+                    {unusedPeople.length === 0
+                      ? "None"
+                      : unusedPeople.map((person) => <PersonBlob key={person.id} name={person.name} />)
+                    }
+                  </div>
                 </div>
-              );
+              </div>);
             })}
           </div>
         </div>
