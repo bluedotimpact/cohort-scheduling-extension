@@ -247,17 +247,16 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
     intervals: [[cohort.time, cohort.time + preset.lengthOfMeeting / MINUTES_IN_UNIT as Unit]],
     class: "bg-purple-500",
   }
-  const availabilities: TimeAvWidgetProps["availabilities"] = hoveredPerson
-    ? [{
-        intervals: hoveredPerson.timeAv,
-        class: "bg-green-500",
-        opacity: 0.3,
-      }, agreedTime]
-    : [...Object.entries(availabilitiesByCount).map(([count, intervals]) => ({
-        intervals,
-        class: "bg-green-500",
-        opacity: parseInt(count) / allPeople.length,
-      })), agreedTime];
+  const [showAgreedTime, setShowAgreedTime] = useState(true);
+  const availabilities: TimeAvWidgetProps["availabilities"] = [(hoveredPerson ? [{
+    intervals: hoveredPerson.timeAv,
+    class: "bg-green-500",
+    opacity: 0.3,
+  }] : Object.entries(availabilitiesByCount).map(([count, intervals]) => ({
+    intervals,
+    class: "bg-green-500",
+    opacity: parseInt(count) / allPeople.length,
+  }))), (showAgreedTime ? [agreedTime] : [])].flat(1)
 
   return (
     <>
@@ -312,6 +311,12 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
             : "Hover over someone to view their individual availability"}
         </span>
         <TimeAvWidget availabilities={availabilities} />
+        <Switch
+            value={showAgreedTime}
+            onChange={(value) => setShowAgreedTime(value)}
+            label={"Show agreed time"}
+            width="auto"
+          />
       </div>
     </>
   );
