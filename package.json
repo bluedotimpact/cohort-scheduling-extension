@@ -3,6 +3,7 @@
         "start": "npm run start:software",
         "start:software": "block run --remote software",
         "start:course_runner": "block run --remote course_runner",
+        "start:eavp": "block run --remote eavp",
         "type-check": "tsc --noEmit --esModuleInterop --jsx react frontend/**.tsx lib/**.ts",
         "test": "jest",
         "lint": "eslint --ext .js,.jsx,.ts,.tsx frontend lib",
