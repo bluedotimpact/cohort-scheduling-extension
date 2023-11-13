@@ -23,13 +23,23 @@ const OtherPage = () => {
 
   const base = useBase();
 
+  const [recalculating, setRecalculating] = useState<boolean>(false);
+  const [error, setError] = useState<Error | undefined>(undefined);
+
   const configuredPersonTypes = Object.values(preset.personTypes)
     .filter((personType) =>
       personType.cohortOverlapFullField ||
       personType.cohortOverlapPartialField
     )
 
+  if (!preset.cohortsTable) {
+    return <Text>Select a cohorts table</Text>
+  }
   const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
+  if (!cohortsTable) {
+    return <Text>Cohorts table ({preset.cohortsTable}) not found</Text>
+  }
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const rawCohorts = useRecords(cohortsTable, {
     fields: [
       preset.cohortsTableStartDateField,
@@ -57,8 +67,6 @@ const OtherPage = () => {
     }];
   });
 
-  const [recalculating, setRecalculating] = useState<boolean>(false);
-  const [error, setError] = useState<Error | undefined>(undefined);
   const recalculateOverlap = async () => {
     try {
       setError(undefined);
