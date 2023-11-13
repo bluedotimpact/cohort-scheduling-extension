@@ -11,14 +11,14 @@
         "deploy": "node deploy.js"
     },
     "dependencies": {
-        "@airtable/blocks": "^1.17.0",
+        "@airtable/blocks": "^1.18.0",
         "@headlessui/react": "^1.7.7",
         "glpk.js": "^4.0.1",
         "react": "^16.14.0",
         "react-dom": "^16.14.0"
     },
     "devDependencies": {
-        "@airtable/blocks-cli": "^2.0.3",
+        "@airtable/blocks-cli": "^2.0.4",
         "@types/jest": "^29.2.5",
         "@typescript-eslint/eslint-plugin": "^5.48.1",
         "@typescript-eslint/parser": "^5.48.1",
