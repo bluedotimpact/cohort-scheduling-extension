@@ -26,8 +26,8 @@ export interface Cohort {
   people: { [personType: string]: string[] },
 }
 
-const toBinary = (personType: PersonType, person: Person, t: number): string => JSON.stringify([personType.name, person.id, t.toString()]);
-const fromBinary = (binary: string): [string, string, string] => JSON.parse(binary);
+const toBinary = (personType: PersonType, person: Person, t: number): string => JSON.stringify([personType.name, person.id, t]);
+const fromBinary = (binary: string): [string, string, number] => JSON.parse(binary);
 
 const getCohortCount = (t: number): string => `cohortCount-${t}`;
 
@@ -67,19 +67,24 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
   // array from 0 to maxT
   const times = Array.from({ length: maxT }, (_, i) => i);
 
-  // VARIABLES
+  const cohortCounts: string[] = [];
+  for (const t of times) {
+    cohortCounts.push(getCohortCount(t));
+  }
+
   const binaries: string[] = [];
   for (const personType of personTypes) {
     for (const person of personType.people) {
       for (const t of times) {
-        binaries.push(toBinary(personType, person, t));
+        const isAvailable = person.timeAv.some(
+          ([b, e]) => b <= t && t <= e - lengthOfMeeting
+        )
+        if (isAvailable) {
+          const u = toBinary(personType, person, t);
+          binaries.push(u);
+        }
       }
     }
-  }
-
-  const cohortCounts: string[] = [];
-  for (const t of times) {
-    cohortCounts.push(getCohortCount(t));
   }
 
   const assignmentConstraints: LP["subjectTo"] = [];
@@ -89,36 +94,44 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
     for (const person of personType.people) {
       const personBinaries: string[] = [];
       for (const t of times) {
-        const u = toBinary(personType, person, t);
-        personBinaries.push(u);
+        const isAvailable = person.timeAv.some(
+          ([b, e]) => b <= t && t <= e - lengthOfMeeting
+        )
+        if (isAvailable) {
+          const u = toBinary(personType, person, t);
+          personBinaries.push(u);
+          availabilityConstraints.push({
+            name: u + "-availability",
+            vars: [{ name: u, coef: 1 }],
+            bnds: {
+              type: glpk.GLP_UP,
+              ub: 1,
+              lb: 0,
+            },
+          });
 
-        availabilityConstraints.push({
-          name: u + "-availability",
-          vars: [{ name: u, coef: 1 }],
-          bnds: {
-            type: glpk.GLP_UP,
-            ub: person.timeAv.some(
-              ([b, e]) => b <= t && t <= e - lengthOfMeeting
-            )
-              ? 1
-              : 0,
-            lb: 0,
-          },
-        });
-
-        const meetingVars: string[] = [];
-        for (let i = 0; i < lengthOfMeeting; i++) {
-          meetingVars.push(toBinary(personType, person, t + i));
+          // No need to not overlap if only scheduling one cohort
+          if (person.howManyCohorts > 1) {
+            const meetingVars: string[] = [];
+            for (let i = 0; i < lengthOfMeeting; i++) {
+              const u = toBinary(personType, person, t + i)
+              if (binaries.includes(u)) {
+                meetingVars.push(u);
+              }
+            }
+            if (meetingVars.length >= 2) {
+              nonOverlappingConstraints.push({
+                name: u + "-non-overlapping",
+                vars: meetingVars.map((u) => ({ name: u, coef: 1 })),
+                bnds: {
+                  type: glpk.GLP_UP,
+                  ub: 1,
+                  lb: 0,
+                },
+              });
+            }
+          }
         }
-        nonOverlappingConstraints.push({
-          name: u + "-non-overlapping",
-          vars: meetingVars.map((u) => ({ name: u, coef: 1 })),
-          bnds: {
-            type: glpk.GLP_UP,
-            ub: 1,
-            lb: 0,
-          },
-        });
       }
 
       assignmentConstraints.push({
@@ -132,7 +145,7 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
   const cohortCountConstraints: LP["subjectTo"] = [];
   for (const t of times) {
     for (const personType of personTypes) {
-      const personBinaries = personType.people.map(person => toBinary(personType, person, t));
+      const personBinaries = personType.people.map(person => toBinary(personType, person, t)).filter(b => binaries.includes(b));
 
       cohortCountConstraints.push({
         name: personType.name + "-" + t + "-max",
@@ -153,20 +166,20 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
     }
   }
 
-  const constraints = [
+  const constraints = ([
     ...assignmentConstraints,
     ...availabilityConstraints,
     ...nonOverlappingConstraints,
     ...cohortCountConstraints,
-  ];
+  ]);
 
   try {
     const res = await glpk.solve(
       {
-        name: "eh?",
+        name: "scheduler",
         objective: {
           direction: glpk.GLP_MAX,
-          name: "eh2?",
+          name: "max_scheduled_sessions",
           vars: binaries.map((u) => ({ name: u, coef: 1 })),
         },
         subjectTo: constraints,
@@ -176,12 +189,12 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
       options
     );
 
-    /* PROCESS RESULT
-     [{ people: { Participant: [id, ...], Facilitator: [id, ...] }
-        time: number }, ...] */
-    const timeslots = {};
+    /* PROCESS RESULT */
+    const timeslots: Record<number, Record<PersonType['name'], Person['id'][]>> = {};
     for (const binary of Object.keys(res.result.vars)) {
-      if (binary.includes("cohortCount")) continue;
+      if (binary.includes("cohortCount")) {
+        continue;
+      }
       const [personType, person, t] = fromBinary(binary);
       if (res.result.vars[binary] == 1) {
         if (!timeslots[t]) timeslots[t] = {};
@@ -189,7 +202,7 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
         timeslots[t][personType].push(person);
       }
     }
-
+    
     const largeCohorts: Cohort[] = [];
     for (const t of Object.keys(timeslots)) {
       largeCohorts.push({
@@ -239,4 +252,13 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
     console.log(e);
     return null;
   }
+}
+
+const shuffle = <T>(array: T[]): T[] => {
+  const arrayCopy = array.slice();
+  for (let i = arrayCopy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arrayCopy[i], arrayCopy[j]] = [arrayCopy[j], arrayCopy[i]];
+  }
+  return arrayCopy;
 }
