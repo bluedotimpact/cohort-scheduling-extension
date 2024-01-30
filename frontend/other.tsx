@@ -44,6 +44,7 @@ const OtherPage = () => {
     fields: [
       preset.cohortsTableStartDateField,
       preset.cohortsTableEndDateField,
+      preset.cohortsIterationField,
     ],
   });
   const cohortsWithTimes = rawCohorts.flatMap((cohort) => {
@@ -63,6 +64,7 @@ const OtherPage = () => {
     return [{
       id: cohort.id,
       name: cohort.name,
+      iteration: cohort.getCellValueAsString(preset.cohortsIterationField),
       timeAv,
     }];
   });
@@ -74,30 +76,33 @@ const OtherPage = () => {
         console.log("updating", personType.name);
 
         const table = base.getTableByIdIfExists(personType.sourceTable);
+        const view = personType.sourceView ? table.getViewById(personType.sourceView) : table
 
-        const records = (await table.selectRecordsAsync()).records;
+        const persons = (await view.selectRecordsAsync()).records;
         const updatedRecords = [];
-        for (const record of records) {
+        for (const person of persons) {
           try {
-            const parsedTimeAv = parseTimeAvString(
-              record.getCellValueAsString(personType.timeAvField)
+            const personTimeAv = parseTimeAvString(
+              person.getCellValueAsString(personType.timeAvField)
             );
+
+            const iterationCohorts = cohortsWithTimes.filter(c => c.iteration === person.getCellValueAsString(personType.iterationField))
 
             const fields = {};
             if (personType.cohortOverlapFullField) {
-              fields[personType.cohortOverlapFullField] = cohortsWithTimes
+              fields[personType.cohortOverlapFullField] = iterationCohorts
                 .filter((cohort) => {
                   const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-                  return parsedTimeAv.some(([b, e]) => mb >= b && me <= e);
+                  return personTimeAv.some(([b, e]) => mb >= b && me <= e);
                 })
                 .map(({ id }) => ({ id }));
             }
 
             if (personType.cohortOverlapPartialField) {
-              fields[personType.cohortOverlapPartialField] = cohortsWithTimes
+              fields[personType.cohortOverlapPartialField] = iterationCohorts
                 .filter((cohort) => {
                   const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-                  return parsedTimeAv.some(
+                  return personTimeAv.some(
                     ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)
                   );
                 })
@@ -105,15 +110,15 @@ const OtherPage = () => {
             }
 
             const newRecord = {
-              id: record.id,
+              id: person.id,
               fields,
             };
             updatedRecords.push(newRecord);
           } catch (throwable: unknown) {
-            const prefix = `In processing person "${record.name}" (${record.id}): `;
+            const prefix = `In processing person "${person.name}" (${person.id}): `;
             const error: Error = throwable instanceof Error ? throwable : new Error(String(throwable))
             error.message = prefix + error.message;
-            (error as { record?: Record }).record = record;
+            (error as { record?: Record }).record = person;
             throw error;
           }
         }

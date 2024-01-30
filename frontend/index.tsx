@@ -29,6 +29,7 @@ export type Preset = {
   cohortsTable?: string;
   cohortsTableStartDateField?: string;
   cohortsTableEndDateField?: string;
+  cohortsIterationField?: string;
 };
 
 const createPreset = (name: string) => ({
@@ -149,6 +150,7 @@ function App() {
     preset.cohortsTable &&
     preset.cohortsTableStartDateField &&
     preset.cohortsTableEndDateField &&
+    preset.cohortsIterationField &&
     Object.keys(preset.personTypes).length > 0 &&
     Object.values(preset.personTypes).every((personType) => (
         personType.name &&
@@ -156,6 +158,7 @@ function App() {
         personType.timeAvField &&
         personType.howManyTypePerCohort &&
         personType.howManyCohortsPerType &&
+        personType.iterationField &&
         personType.cohortsTableField
     ));
 

@@ -40,7 +40,7 @@ const ViewPerson = ({ tableId, recordId }) => {
   });
   const personType: PersonType = preset.personTypes[personTypeId];
 
-  const timeAv = parseTimeAvString(record.getCellValueAsString(personType.timeAvField));
+  const personTimeAv = parseTimeAvString(record.getCellValueAsString(personType.timeAvField));
 
   const [overlapType, setOverlapType] = useState<"full" | "partial">("full");
 
@@ -50,6 +50,7 @@ const ViewPerson = ({ tableId, recordId }) => {
     fields: [
       preset.cohortsTableStartDateField,
       preset.cohortsTableEndDateField,
+      preset.cohortsIterationField,
     ],
   });
   const cohortsWithTimes = rawCohorts.map((cohort) => {
@@ -69,25 +70,28 @@ const ViewPerson = ({ tableId, recordId }) => {
     return {
       id: cohort.id,
       name: cohort.name,
+      iteration: cohort.getCellValueAsString(preset.cohortsIterationField),
       timeAv: meetingDates.some(d => isNaN(d.getTime())) ? null : timeAv,
     };
   }).filter(c => c.timeAv);
 
-  const cohortsFull = cohortsWithTimes.filter((cohort) => {
+  const iterationCohorts = cohortsWithTimes.filter(c => c.iteration === record.getCellValueAsString(personType.iterationField))
+
+  const cohortsFull = iterationCohorts.filter((cohort) => {
     const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-    return timeAv.some(([b, e]) => mb >= b && me <= e);
+    return personTimeAv.some(([b, e]) => mb >= b && me <= e);
   });
 
-  const cohortsPartial = cohortsWithTimes.filter((cohort) => {
+  const cohortsPartial = iterationCohorts.filter((cohort) => {
     const [[mb, me]] = parseTimeAvString(cohort.timeAv);
-    return timeAv.some(
+    return personTimeAv.some(
       ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)
     );
   });
 
   const [hoveredCohort, setHoveredCohort] = useState(null);
 
-  if (timeAv.length === 0) {
+  if (personTimeAv.length === 0) {
     return (
       <div className="text-gray-700">
         Participant hasn&apos;t filled out the time availability form.
@@ -101,7 +105,7 @@ const ViewPerson = ({ tableId, recordId }) => {
         </Heading>
         <TimeAvWidget
           availabilities={[{
-            intervals: timeAv,
+            intervals: personTimeAv,
             class: "bg-green-500",
           }, {
             intervals: hoveredCohort ? parseTimeAvString(hoveredCohort.timeAv) : [],

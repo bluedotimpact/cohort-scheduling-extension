@@ -15,6 +15,7 @@ import {
   useSynced,
   ViewPickerSynced
 } from "@airtable/blocks/ui";
+import { FieldType } from "@airtable/blocks/models";
 import React, { useMemo, useState } from "react";
 import { Preset } from ".";
 import { MS_IN_MINUTE, MS_IN_WEEK, MINUTES_IN_UNIT } from "../lib/constants";
@@ -29,6 +30,7 @@ export type PersonType = {
   timeAvField?: string;
   cohortOverlapFullField?: string;
   cohortOverlapPartialField?: string;
+  iterationField?: string,
   howManyTypePerCohort?: [number, number];
   howManyCohortsPerType?: number | string;
   cohortsTableField?: string;
@@ -100,6 +102,7 @@ const PersonTypeComp = (props) => {
           <FieldPickerSynced
             table={cohortsTable}
             placeholder="Pick cohort link field..."
+            allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
             globalConfigKey={[...path, "cohortsTableField"]}
           />
         </div>
@@ -179,18 +182,28 @@ const PersonTypeComp = (props) => {
                   <FormField label="Time availability field">
                     <FieldPickerSynced
                       table={sourceTable}
+                      allowedTypes={[FieldType.SINGLE_LINE_TEXT]}
                       globalConfigKey={[...path, "timeAvField"]}
+                    />
+                  </FormField>
+                  <FormField label="Iteration field">
+                    <FieldPickerSynced
+                      table={sourceTable}
+                      allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
+                      globalConfigKey={[...path, "iterationField"]}
                     />
                   </FormField>
                   <FormField label="Cohort full overlap field (optional)">
                     <FieldPickerSynced
                       table={sourceTable}
+                      allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
                       globalConfigKey={[...path, "cohortOverlapFullField"]}
                     />
                   </FormField>
                   <FormField label="Cohort partial overlap field (optional)">
                     <FieldPickerSynced
                       table={sourceTable}
+                      allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
                       globalConfigKey={[...path, "cohortOverlapPartialField"]}
                     />
                   </FormField>
@@ -328,7 +341,8 @@ const SetupPage = () => {
   const cohortsTableConfigured =
     preset.cohortsTable &&
     preset.cohortsTableStartDateField &&
-    preset.cohortsTableEndDateField;
+    preset.cohortsTableEndDateField &&
+    preset.cohortsIterationField;
 
   const typesOfPeopleConfigured =
     Object.keys(preset.personTypes).length > 0 &&
@@ -392,27 +406,34 @@ const SetupPage = () => {
               globalConfigKey={[...path, "cohortsTable"]}
               onChange={() => {
                 globalConfig.setPathsAsync([
-                  {
-                    path: [...path, "cohortsTableStartDateField"],
-                    value: null,
-                  },
+                  { path: [...path, "cohortsTableStartDateField"], value: null },
                   { path: [...path, "cohortsTableEndDateField"], value: null },
+                  { path: [...path, "cohortsIterationField"], value: null },
                 ]);
               }}
             />
           </FormField>
           {cohortsTable && (
             <div className="grid sm:grid-cols-2 gap-1">
-              <FormField label="Start date field">
+              <FormField label="First session start time field">
                 <FieldPickerSynced
                   table={cohortsTable}
+                  allowedTypes={[FieldType.DATE_TIME]}
                   globalConfigKey={[...path, "cohortsTableStartDateField"]}
                 />
               </FormField>
-              <FormField label="End date field">
+              <FormField label="First session end time field">
                 <FieldPickerSynced
                   table={cohortsTable}
+                  allowedTypes={[FieldType.DATE_TIME]}
                   globalConfigKey={[...path, "cohortsTableEndDateField"]}
+                />
+              </FormField>
+              <FormField label="Iteration field">
+                <FieldPickerSynced
+                  table={cohortsTable}
+                  allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
+                  globalConfigKey={[...path, "cohortsIterationField"]}
                 />
               </FormField>
             </div>
