@@ -1,4 +1,4 @@
-import Record from "@airtable/blocks/dist/types/src/models/record";
+import AirtableRecord from "@airtable/blocks/dist/types/src/models/record";
 import {
   expandRecord,
   Heading,
@@ -13,17 +13,13 @@ import {
 } from "@airtable/blocks/ui";
 import React, { useEffect, useState } from "react";
 import { Preset } from ".";
-import { MINUTES_IN_UNIT } from "../lib/constants";
-import { dateToCoord } from "../lib/date";
-import { prettyPrintDayTime } from "../lib/format";
-import { Interval, parseDayTime, parseTimeAvString, Unit, unparseNumber } from "../lib/parse";
 import { Cohort } from "../lib/scheduler";
-import { combineIntervals } from "../lib/util";
 import { CohortBlob, PersonBlob } from "./components/Blobs";
 import { TimeAvWidget, TimeAvWidgetProps } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
+import { format, fromDate, parseIntervals, Interval, calculateScheduleOverlap } from "weekly-availabilities";
 
-const ViewPerson = ({ tableId, recordId }) => {
+const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, recordId }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
@@ -31,20 +27,17 @@ const ViewPerson = ({ tableId, recordId }) => {
 
   const base = useBase();
 
-  const table = base.getTableByIdIfExists(tableId);
-  const record = useRecordById(table, recordId);
+  const table = base.getTableByIdIfExists(tableId)!;
+  const record = useRecordById(table, recordId)!;
 
-  const personTypeId = Object.keys(preset.personTypes).find((id) => {
-    const personType = preset.personTypes[id];
-    return personType.sourceTable === tableId;
-  });
-  const personType: PersonType = preset.personTypes[personTypeId];
+  const personType: PersonType = Object.values(preset.personTypes)
+    .find((pt) => pt.sourceTable === tableId)!;
 
-  const personTimeAv = parseTimeAvString(record.getCellValueAsString(personType.timeAvField));
+  const personTimeAv = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
 
   const [overlapType, setOverlapType] = useState<"full" | "partial">("full");
 
-  const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
+  const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!)!;
 
   const rawCohorts = useRecords(cohortsTable, {
     fields: [
@@ -53,43 +46,41 @@ const ViewPerson = ({ tableId, recordId }) => {
       preset.cohortsIterationField,
     ],
   });
-  const cohortsWithTimes = rawCohorts.map((cohort) => {
+  const cohortsWithTimes = rawCohorts.flatMap((cohort) => {
     const meetingDates = [
       // getCellValueAsString returns something that can't be parsed by the date constructor
       // this returns an ISO timestamp that can
-      new Date(cohort.getCellValue(preset.cohortsTableStartDateField) as string),
-      new Date(cohort.getCellValue(preset.cohortsTableEndDateField) as string),
+      new Date(cohort.getCellValue(preset.cohortsTableStartDateField!) as string),
+      new Date(cohort.getCellValue(preset.cohortsTableEndDateField!) as string),
     ];
 
-    // Meeting interval
-    // e.g. M10:00 M11:30
-    const timeAv = meetingDates
-      .map(dateToCoord)
-      .map(prettyPrintDayTime)
-      .join(" ");
+    if (meetingDates.some(d => isNaN(d.getTime()))) {
+      return [];
+    }
+
     return {
       id: cohort.id,
       name: cohort.name,
-      iteration: cohort.getCellValueAsString(preset.cohortsIterationField),
-      timeAv: meetingDates.some(d => isNaN(d.getTime())) ? null : timeAv,
+      iteration: cohort.getCellValueAsString(preset.cohortsIterationField!),
+      timeAv: meetingDates.map((d) => fromDate(d)) as Interval,
     };
-  }).filter(c => c.timeAv);
+  });
 
-  const iterationCohorts = cohortsWithTimes.filter(c => c.iteration === record.getCellValueAsString(personType.iterationField))
+  const iterationCohorts = cohortsWithTimes.filter(c => c.iteration === record.getCellValueAsString(personType.iterationField!))
 
   const cohortsFull = iterationCohorts.filter((cohort) => {
-    const [[mb, me]] = parseTimeAvString(cohort.timeAv);
+    const [mb, me] = cohort.timeAv;
     return personTimeAv.some(([b, e]) => mb >= b && me <= e);
   });
 
   const cohortsPartial = iterationCohorts.filter((cohort) => {
-    const [[mb, me]] = parseTimeAvString(cohort.timeAv);
+    const [mb, me] = cohort.timeAv;
     return personTimeAv.some(
       ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)
     );
   });
 
-  const [hoveredCohort, setHoveredCohort] = useState(null);
+  const [hoveredCohort, setHoveredCohort] = useState<typeof iterationCohorts[number] | null>(null);
 
   if (personTimeAv.length === 0) {
     return (
@@ -108,7 +99,7 @@ const ViewPerson = ({ tableId, recordId }) => {
             intervals: personTimeAv,
             class: "bg-green-500",
           }, {
-            intervals: hoveredCohort ? parseTimeAvString(hoveredCohort.timeAv) : [],
+            intervals: hoveredCohort ? [hoveredCohort.timeAv] : [],
             class: "bg-purple-500",
             opacity: 0.7,
           }]}
@@ -146,13 +137,13 @@ const ViewPerson = ({ tableId, recordId }) => {
                       className="flex"
                       style={{ flex: "4 1 0" }}
                       onClick={() =>
-                        expandRecord(rawCohorts.find((c) => c.id === cohort.id))
+                        expandRecord(rawCohorts.find((c) => c.id === cohort.id)!)
                       }
                     >
                       <CohortBlob name={cohort.name} />
                     </div>
                     <div style={{ flex: "1 1 0" }}>
-                      {cohort.timeAv.replace(" ", " – ")}
+                      {format(cohort.timeAv).replace(" ", " – ")}
                     </div>
                   </div>
                 );
@@ -165,11 +156,7 @@ const ViewPerson = ({ tableId, recordId }) => {
   }
 };
 
-interface ViewCohortProps {
-  cohort: Cohort
-}
-
-export const ViewCohort = ({ cohort }: ViewCohortProps) => {
+export const ViewCohort = ({ cohort }: { cohort: Cohort }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
@@ -177,29 +164,29 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
 
   const base = useBase();
 
-  const [hoveredPerson, setHoveredPerson] = useState<null | (Record & { timeAv: Interval[] })>(null);
+  const [hoveredPerson, setHoveredPerson] = useState<null | (AirtableRecord & { timeAv: Interval[] })>(null);
   useEffect(() => {
     setHoveredPerson(null);
   }, [cohort]);
 
-  const peopleRecords: { [personTypeId: string]: (Record & { timeAv: Interval[] })[] } = {};
-  const allPeople = Object.keys(cohort.people).reduce<(Record & { timeAv: Interval[] })[]>((acc, personTypeName) => {
-    const personTypeID = Object.keys(preset.personTypes).find(
-      (id) => preset.personTypes[id].name === personTypeName
-    );
-    const personType = preset.personTypes[personTypeID];
+  const peopleRecords: { [personTypeId: string]: (AirtableRecord & { timeAv: Interval[] })[] } = {};
+  const allPeople = Object.keys(cohort.people).reduce<(AirtableRecord & { timeAv: Interval[] })[]>((acc, personTypeName) => {
+    const personTypeId = Object.keys(preset.personTypes).find(
+      (id) => preset.personTypes[id]?.name === personTypeName
+    )!;
+    const personType = preset.personTypes[personTypeId]!;
 
-    const table = base.getTableByIdIfExists(personType.sourceTable);
+    const table = base.getTableByIdIfExists(personType.sourceTable!)!;
 
     // TODO: we shouldn't use a hook here
     // If the set of person types changes, there will be undefined behaviour!
     // In practice this is very rare though
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    const records = useRecords(table) as (Record & { timeAv: Interval[] })[];
-    peopleRecords[personTypeID] = records;
-    const people = cohort.people[personTypeName].map((personID) => {
-      const person = records.find((person) => person.id === personID)
-      person.timeAv = parseTimeAvString(person.getCellValueAsString(personType.timeAvField));
+    const records = useRecords(table) as (AirtableRecord & { timeAv: Interval[] })[];
+    peopleRecords[personTypeId] = records;
+    const people = cohort.people[personTypeName]!.map((personID) => {
+      const person = records.find((person) => person.id === personID)!
+      person.timeAv = parseIntervals(person.getCellValueAsString(personType.timeAvField!));
       return person;
     });
     return [...acc, ...people];
@@ -212,22 +199,22 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
 
         if (e.key === "ArrowRight") {
           if (!hoveredPerson) {
-            setHoveredPerson(allPeople[0]);
+            setHoveredPerson(allPeople[0]!);
           } else {
             const index = allPeople.indexOf(hoveredPerson);
             if (index < allPeople.length - 1) {
-              setHoveredPerson(allPeople[index + 1]);
+              setHoveredPerson(allPeople[index + 1]!);
             }
           }
         }
 
         if (e.key === "ArrowLeft") {
           if (!hoveredPerson) {
-            setHoveredPerson(allPeople[allPeople.length - 1]);
+            setHoveredPerson(allPeople[allPeople.length - 1]!);
           } else {
             const index = allPeople.indexOf(hoveredPerson);
             if (index > 0) {
-              setHoveredPerson(allPeople[index - 1]);
+              setHoveredPerson(allPeople[index - 1]!);
             }
           }
         }
@@ -239,16 +226,16 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoveredPerson]);
 
-  const combinedIntervals = combineIntervals(allPeople.map(({ timeAv }) => timeAv));
+  const combinedIntervals = calculateScheduleOverlap(allPeople.map(({ timeAv }) => timeAv));
 
   const availabilitiesByCount = combinedIntervals.reduce<{ [count: number]: Interval[] }>((acc, cur) => {
     acc[cur.count] = acc[cur.count] ?? []
-    acc[cur.count].push(cur.interval)
+    acc[cur.count]!.push(cur.interval)
     return acc;
   }, {})
 
   const agreedTime: TimeAvWidgetProps["availabilities"][number] = {
-    intervals: [[cohort.time, cohort.time + preset.lengthOfMeeting / MINUTES_IN_UNIT as Unit]],
+    intervals: [[cohort.startTime, cohort.endTime]],
     class: "bg-purple-500",
   }
   const [showAgreedTime, setShowAgreedTime] = useState(true);
@@ -267,24 +254,20 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
       <div className="flex">
         <div className="w-28 shrink-0 font-semibold">Meeting time:</div>
         <div>
-          {prettyPrintDayTime(unparseNumber(cohort.time))} —{" "}
-          {prettyPrintDayTime(
-            unparseNumber(cohort.time + preset.lengthOfMeeting / MINUTES_IN_UNIT)
-          )}
+          {format([cohort.startTime, cohort.endTime])}
         </div>
       </div>
-      {Object.keys(preset.personTypes).map((personTypeID) => {
-        const personType = preset.personTypes[personTypeID];
+      {Object.entries(preset.personTypes).map(([personTypeId, personType]) => {
         return (
-          <div key={personTypeID} className="flex">
+          <div key={personTypeId} className="flex">
             <div className="w-28 shrink-0 font-semibold">
               {personType.name}s:
             </div>
             <div className="flex flex-wrap">
-              {cohort.people[personType.name].map((personID) => {
-                const person = peopleRecords[personTypeID].find(
+              {cohort.people[personType.name]!.map((personID) => {
+                const person = peopleRecords[personTypeId]!.find(
                   (person) => person.id === personID
-                );
+                )!;
 
                 return (
                   <div
@@ -326,32 +309,26 @@ export const ViewCohort = ({ cohort }: ViewCohortProps) => {
   );
 };
 
-const ViewCohortWrapper = ({ recordId }) => {
+const ViewCohortWrapper = ({ recordId }: { recordId: string }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
   const preset = globalConfig.get([...path]) as Preset;
 
   const base = useBase();
-  const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable);
+  const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!)!;
+  const cohortRecord = useRecordById(cohortsTable, recordId)!;
 
-  const cohortRecord = useRecordById(cohortsTable, recordId);
-  const startDate = cohortRecord.getCellValue(
-    preset.cohortsTableStartDateField
-  );
-
-  const people = {};
-  for (const personTypeId of Object.keys(preset.personTypes)) {
-    const personType = preset.personTypes[personTypeId];
+  const people: Record</* personType */ string, string[]> = {};
+  for (const personType of Object.values(preset.personTypes)) {
     people[personType.name] = (
-      cohortRecord.getCellValue(personType.cohortsTableField) as any[]
-    ).map(({ id }) => id);
+      cohortRecord.getCellValue(personType.cohortsTableField!) as any[]
+    ).map(({ id }: { id: string }) => id);
   }
 
-  const cohort = {
-    time: parseDayTime(
-      prettyPrintDayTime(dateToCoord(new Date(startDate as string)))
-    ),
+  const cohort: Cohort = {
+    startTime: fromDate(new Date(cohortRecord.getCellValue(preset.cohortsTableStartDateField!) as string)),
+    endTime: fromDate(new Date(cohortRecord.getCellValue(preset.cohortsTableEndDateField!) as string)),
     people,
   };
 
@@ -371,13 +348,11 @@ const ViewPage = () => {
 
   const base = useBase();
 
-  const personTables = Object.keys(preset.personTypes).map(
-    (personTypeID) => preset.personTypes[personTypeID].sourceTable
-  );
-  const configuredTables = [preset.cohortsTable, ...personTables];
+  const personTables = Object.values(preset.personTypes).map((personType) => personType.sourceTable!);
+  const configuredTables = [preset.cohortsTable!, ...personTables];
 
   const helpText = `Go to any of your configured tables (${configuredTables
-    .map((tid) => base.getTableByIdIfExists(tid).name)
+    .map((tid) => base.getTableByIdIfExists(tid)!.name)
     .join(", ")}) and select any record (by clicking on any cell).`;
 
   if (cursor.selectedRecordIds.length === 0) {
@@ -397,12 +372,12 @@ const ViewPage = () => {
   } else if (personTables.some((tid) => tid === cursor.activeTableId)) {
     return (
       <ViewPerson
-        tableId={cursor.activeTableId}
-        recordId={cursor.selectedRecordIds[0]}
+        tableId={cursor.activeTableId!}
+        recordId={cursor.selectedRecordIds[0]!}
       />
     );
   } else {
-    return <ViewCohortWrapper recordId={cursor.selectedRecordIds[0]} />;
+    return <ViewCohortWrapper recordId={cursor.selectedRecordIds[0]!} />;
   }
 };
 

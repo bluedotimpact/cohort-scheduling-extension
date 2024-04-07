@@ -1,7 +1,12 @@
 import { Icon } from "@airtable/blocks/ui";
 import React from "react";
 
-export const FixedNumberInput = ({ value, increment, decrement, render }) => {
+export const FixedNumberInput = ({ value, increment, decrement, render }: {
+  value: number,
+  increment: () => void,
+  decrement: () => void,
+  render: (value: number) => React.ReactNode,
+}) => {
   return (
     <div className="flex items-center">
       <div className="flex flex-col">

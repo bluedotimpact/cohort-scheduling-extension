@@ -14,12 +14,13 @@ import {
 } from "@airtable/blocks/ui";
 import { Tab } from "@headlessui/react";
 import React, { Fragment, useMemo, useState } from "react";
-import { thisMondayUtc } from "../lib/date";
 import { newUID } from "../lib/util";
 import AlgorithmPage from "./algorithm";
 import OtherPage from "./other";
 import SetupPage, { PersonType } from "./setup";
 import ViewPage from "./view";
+import { parseWeeklyTime, toDate } from "weekly-availabilities";
+import { IconName } from "@airtable/blocks/dist/types/src/ui/icon_config";
 
 export type Preset = {
   name: string;
@@ -35,7 +36,7 @@ export type Preset = {
 const createPreset = (name: string) => ({
   name,
   lengthOfMeeting: 90,
-  firstWeek: thisMondayUtc().getTime(),
+  firstWeek: toDate(parseWeeklyTime('M00:00')).getTime(),
   personTypes: [],
 });
 
@@ -45,11 +46,11 @@ const PresetChooser = () => {
 
   const presetOptions = useMemo(() => {
     if (!presets) return [];
-    else
-      return Object.keys(presets).map((presetId) => ({
-        label: presets[presetId].name,
-        value: presetId,
-      }));
+
+    return Object.keys(presets).map((presetId) => ({
+      label: (presets as Record<string, Preset>)[presetId]!.name,
+      value: presetId,
+    }));
   }, [presets]);
 
   const [newPresetDialogOpen, setNewPresetDialogOpen] = useState(false);
@@ -97,7 +98,7 @@ const PresetChooser = () => {
                   closeNewPresetDialog();
                   const newPresetId = newUID();
                   setPresets({
-                    ...(presets as { [presetID: string]: Preset }),
+                    ...(presets as Record<string, Preset>),
                     [newPresetId]: createPreset(newPresetName),
                   });
                   setSelectedPreset(newPresetId);
@@ -113,7 +114,7 @@ const PresetChooser = () => {
   );
 };
 
-function MyTabLink({ icon, label }) {
+const MyTabLink: React.FC<{ icon: IconName, label: React.ReactNode }> = ({ icon, label }) => {
   return (
     <Tab as={Fragment}>
       {({ selected }) => (
@@ -162,7 +163,7 @@ function App() {
         personType.cohortsTableField
     ));
 
-  const showDeletePreset = Object.keys(globalConfig.get("presets")).length > 1
+  const showDeletePreset = Object.keys(globalConfig.get("presets") as Record<string, Preset>).length > 1
 
   return (
     <main className="bg-slate-50 min-h-screen">
@@ -194,7 +195,7 @@ function App() {
                   closeEditPresetDialog();
                   await globalConfig.setAsync(
                     "selectedPreset",
-                    Object.keys(globalConfig.get("presets"))[0]
+                    Object.keys(globalConfig.get("presets") as Record<string, Preset>)[0]
                   );
 
                   await globalConfig.setAsync(

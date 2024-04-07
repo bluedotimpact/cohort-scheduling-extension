@@ -2,13 +2,18 @@ import { Heading, Icon } from "@airtable/blocks/ui";
 import { Disclosure, Transition } from "@headlessui/react";
 import React from "react";
 
-export const CollapsibleSection = (props) => {
+interface CollapsibleSectionProps {
+  defaultOpen?: boolean,
+  title: string,
+}
+
+export const CollapsibleSection: React.FC<CollapsibleSectionProps> = (props) => {
   return (
-    <Disclosure defaultOpen={props.startOpen}>
+    <Disclosure defaultOpen={props.defaultOpen ?? false}>
       {({ open }) => (
         <div>
           <Disclosure.Button>
-            <Heading size={props.size} className="flex">
+            <Heading size="xsmall" className="flex">
               <div className="flex items-center">
                 <Icon
                   name="caret"
@@ -27,7 +32,7 @@ export const CollapsibleSection = (props) => {
             leaveFrom="transform scale-100 opacity-100"
             leaveTo="transform scale-95 opacity-0"
           >
-            <Disclosure.Panel className={"pl-6 " + props.className}>
+            <Disclosure.Panel className={"pl-6"}>
               {props.children}
             </Disclosure.Panel>
           </Transition>

@@ -18,7 +18,7 @@ import {
 import { FieldType } from "@airtable/blocks/models";
 import React, { useMemo, useState } from "react";
 import { Preset } from ".";
-import { MS_IN_MINUTE, MS_IN_WEEK, MINUTES_IN_UNIT } from "../lib/constants";
+import { MS_IN_WEEK, MINUTES_IN_UNIT } from "../lib/constants";
 import { renderDuration } from "../lib/format";
 import { newUID } from "../lib/util";
 import { FixedNumberInput } from "./components/FixedNumberInput";
@@ -45,7 +45,7 @@ const createPersonType = (): PersonType => ({
   howManyCohortsPerType: 1,
 });
 
-const PersonTypeComp = (props) => {
+const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
 
@@ -218,20 +218,24 @@ const PersonTypeComp = (props) => {
                     <Input
                       type="number"
                       width="80px"
-                      value={personType.howManyTypePerCohort[0] + ""}
+                      value={personType.howManyTypePerCohort?.[0].toString() ?? ''}
                       onChange={(e) => {
                         const n = parseInt(e.target.value);
 
-                        if (n <= personType.howManyTypePerCohort[1]) {
-                          setPersonType({
-                            ...personType,
-                            howManyTypePerCohort: [
-                              n,
-                              personType.howManyTypePerCohort[1],
-                            ],
-                          });
+                        // min shouldn't be greater than max
+                        if (personType.howManyTypePerCohort?.[1] && n > personType.howManyTypePerCohort[1]) {
+                          return;
                         }
-                      }}
+
+                        setPersonType({
+                          ...personType,
+                          howManyTypePerCohort: [
+                            n,
+                            personType.howManyTypePerCohort?.[1] ?? n,
+                          ],
+                        });
+                        }
+                      }
                     />
                   </div>
                   <div>
@@ -239,18 +243,22 @@ const PersonTypeComp = (props) => {
                     <Input
                       type="number"
                       width="80px"
-                      value={personType.howManyTypePerCohort[1] + ""}
+                      value={personType.howManyTypePerCohort?.[1].toString() ?? ''}
                       onChange={(e) => {
                         const n = parseInt(e.target.value);
-                        if (n >= personType.howManyTypePerCohort[0]) {
-                          setPersonType({
-                            ...personType,
-                            howManyTypePerCohort: [
-                              personType.howManyTypePerCohort[0],
-                              n,
-                            ],
-                          });
+
+                        // max shouldn't be less than min
+                        if (personType.howManyTypePerCohort?.[0] && n < personType.howManyTypePerCohort[0]) {
+                          return;
                         }
+
+                        setPersonType({
+                          ...personType,
+                          howManyTypePerCohort: [
+                            personType.howManyTypePerCohort?.[0] ?? n,
+                            n,
+                          ],
+                        });
                       }}
                     />
                   </div>
@@ -325,7 +333,7 @@ const SetupPage = () => {
     selectedPreset as string,
   ]) as Preset;
 
-  const [lengthOfMeeting, setLengthOfMeeting] = useSynced([
+  const [lengthOfMeetingMins, setLengthOfMeeting] = useSynced([
     ...path,
     "lengthOfMeeting",
   ]);
@@ -363,19 +371,19 @@ const SetupPage = () => {
           <div className="grid sm:grid-cols-2 gap-1">
             <FormField label="Meeting length">
               <FixedNumberInput
-                value={lengthOfMeeting}
+                value={lengthOfMeetingMins as number}
                 increment={() =>
-                  setLengthOfMeeting((lengthOfMeeting as number) + MINUTES_IN_UNIT)
+                  setLengthOfMeeting((lengthOfMeetingMins as number) + MINUTES_IN_UNIT)
                 }
                 decrement={() =>
                   setLengthOfMeeting(
                     Math.max(
-                      (lengthOfMeeting as number) - MINUTES_IN_UNIT,
+                      (lengthOfMeetingMins as number) - MINUTES_IN_UNIT,
                       MINUTES_IN_UNIT
                     )
                   )
                 }
-                render={(l) => renderDuration(l * MS_IN_MINUTE)}
+                render={(mins) => renderDuration(mins * 60_000)}
               />
             </FormField>
             <FormField label="First week of meetings">

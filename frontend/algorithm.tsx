@@ -11,20 +11,19 @@ import {
   useGlobalConfig
 } from "@airtable/blocks/ui";
 import React, { useCallback, useEffect, useState } from "react";
-import { MINUTES_IN_UNIT } from "../lib/constants";
-import { getDateFromCoord } from "../lib/date";
-import { parseTimeAvString, unparseNumber } from "../lib/parse";
-import { Cohort, PersonType, SchedulerInput, solve } from "../lib/scheduler";
+import { Cohort, PersonType as SchedulerPersonType, SchedulerInput, solve } from "../lib/scheduler";
 import { wait } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
-import { PersonType as SetupPersonType } from "./setup";
 import { ViewCohort } from "./view";
+import { parseIntervals, toDate } from "weekly-availabilities";
+import { MINUTES_IN_UNIT } from "../lib/constants";
+import { expectInteger } from "../lib/expectInteger";
 
 interface SolutionProps {
   solution: Cohort[],
-  personTypes: PersonType[],
+  personTypes: SchedulerPersonType[],
 }
 
 const Solution = ({ solution, personTypes }: SolutionProps) => {
@@ -94,7 +93,7 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                   onClick={() => setViewedCohortIndex(i)}
                 >
                   {Object.keys(cohort.people).map((personTypeName) => {
-                    const personType = personTypes.find((pt: PersonType) => pt.name === personTypeName);
+                    const personType = personTypes.find((pt: SchedulerPersonType) => pt.name === personTypeName);
                     if (!personType) throw new Error('Person type in cohort but not configured');
 
                     const avgSize = 100 * (personType.min + personType.max) / 2;
@@ -105,11 +104,11 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                         className="flex flex-wrap gap-1 px-1"
                         style={{ flex: `0 1 ${avgSize}%`, minWidth: '80px' }}
                       >
-                        {cohort.people[personTypeName].map((personID) => {
+                        {cohort.people[personTypeName]!.map((personId) => {
                           return (
                             <PersonBlob
-                              key={personID}
-                              name={personType.people.find((person) => person.id === personID)?.name}
+                              key={personId}
+                              name={personType.people.find((person) => person.id === personId)?.name!}
                             />
                           );
                         })}
@@ -177,7 +176,7 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
             </div>
             <Dialog.CloseButton />
           </div>
-          <ViewCohort cohort={solution[viewedCohortIndex]} />
+          <ViewCohort cohort={solution[viewedCohortIndex]!} />
         </Dialog>
       )}
       {isAcceptDialogOpen && (
@@ -205,22 +204,19 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                     onClick={async () => {
                       setSaving(true);
                       const records = solution.map((cohort) => {
-                        const start = cohort.time;
-                        const end = cohort.time + preset.lengthOfMeeting / MINUTES_IN_UNIT;
                         const fields: Record<FieldId, unknown> = {
-                          [preset.cohortsTableStartDateField]: getDateFromCoord(
-                            unparseNumber(start),
+                          [preset.cohortsTableStartDateField!]: toDate(
+                            cohort.startTime,
                             new Date(preset.firstWeek)
                           ),
-                          [preset.cohortsTableEndDateField]: getDateFromCoord(
-                            unparseNumber(end),
+                          [preset.cohortsTableEndDateField!]: toDate(
+                            cohort.endTime,
                             new Date(preset.firstWeek)
                           ),
                         };
 
-                        for (const personTypeID of Object.keys(preset.personTypes)) {
-                          const personType = preset.personTypes[personTypeID];
-                          fields[personType.cohortsTableField] = cohort.people[personType.name].map((id) => ({ id }));
+                        for (const personType of Object.values(preset.personTypes)) {
+                          fields[personType.cohortsTableField!] = cohort.people[personType.name]!.map((id) => ({ id }));
                         }
                         return { fields };
                       });
@@ -270,11 +266,9 @@ const AlgorithmPage = () => {
   useEffect(() => {
     const generateGrandInput = async () => {
       try {
-        const personTypes: PersonType[] = [];
+        const personTypes: SchedulerPersonType[] = [];
 
-        for (const key of Object.keys(preset.personTypes)) {
-          const personType: SetupPersonType = preset.personTypes[key];
-
+        for (const personType of Object.values(preset.personTypes)) {
           const table = personType.sourceTable
             ? base.getTableByIdIfExists(personType.sourceTable)
             : null;
@@ -312,10 +306,15 @@ const AlgorithmPage = () => {
             max: personType.howManyTypePerCohort[1],
             people: peopleRecords.map((record) => {
               try {
+                const timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
                 return {
                   id: record.id,
                   name: record.getCellValueAsString(table.primaryField.id),
-                  timeAv: parseTimeAvString(record.getCellValueAsString(personType.timeAvField!)),
+                  timeAvMins,
+                  timeAvUnits: timeAvMins.map(([s, e]) => [
+                    expectInteger(s / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 30 minute blocks'),
+                    expectInteger(e / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 30 minute blocks')
+                  ]),
                   howManyCohorts:
                   typeof personType.howManyCohortsPerType === "string"
                     ? record.getCellValue(personType.howManyCohortsPerType) as number
@@ -332,7 +331,7 @@ const AlgorithmPage = () => {
           });
         }
         setGrandInput({
-          lengthOfMeeting: preset.lengthOfMeeting / MINUTES_IN_UNIT,
+          lengthOfMeetingMins: preset.lengthOfMeeting,
           personTypes,
         });
       } catch (err) {
@@ -354,18 +353,17 @@ const AlgorithmPage = () => {
   useEffect(() => {
     if (solution) {
       const checkSolution = (async () => {
-        if (!solution) return;
-        return solution.every((cohort) => {
-          const t = cohort.time;
-    
+        if (!solution || !grandInput) return;
+        return solution.every((cohort) => {    
           return Object.keys(cohort.people).every((personTypeName) => {
-            const personType = grandInput?.personTypes.find(
+            const personType = grandInput.personTypes.find(
               (pt) => pt.name === personTypeName
             );
-    
-            return cohort.people[personTypeName].every((personID) => {
-              const timeAv = personType?.people?.find((person) => person.id === personID)?.timeAv ?? [];
-              return grandInput && timeAv.some(([b, e]) => b <= t && t <= e - grandInput.lengthOfMeeting);
+            
+            // Check that for every person in the cohort, they have a slot in their time availability which includes the cohort
+            return cohort.people[personTypeName]!.every((personID) => {
+              const timeAv = personType?.people?.find((person) => person.id === personID)?.timeAvMins ?? [];
+              return timeAv.some(([b, e]) => b <= cohort.startTime && cohort.startTime <= e - grandInput.lengthOfMeetingMins);
             });
           });
         });
@@ -381,7 +379,7 @@ const AlgorithmPage = () => {
         })
       );
     }
-  }, [grandInput, grandInput?.lengthOfMeeting, grandInput?.personTypes, solution]);
+  }, [grandInput, grandInput?.lengthOfMeetingMins, grandInput?.personTypes, solution]);
 
   return (
     <div>
@@ -402,7 +400,6 @@ const AlgorithmPage = () => {
               return (
                 <CollapsibleSection
                   key={personType.name}
-                  size="xsmall"
                   title={`${personType.name} (${personType.people.length})`}
                 >
                   <div className="flex flex-wrap w-full bg-white border p-1 rounded-sm">

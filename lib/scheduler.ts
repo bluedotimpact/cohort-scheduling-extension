@@ -1,8 +1,9 @@
 import GLPK, { LP, Options } from "glpk.js";
-import { Unit } from "./parse";
+import { Interval, WeeklyTime } from "weekly-availabilities";
+import { MINUTES_IN_UNIT } from "./constants";
 
 export interface SchedulerInput {
-  lengthOfMeeting: number,
+  lengthOfMeetingMins: number,
   personTypes: PersonType[],
 }
 
@@ -16,12 +17,14 @@ export interface PersonType {
 export interface Person {
   id: string,
   name: string,
-  timeAv: [number, number][],
+  timeAvMins: Interval[],
+  timeAvUnits: [number, number][],
   howManyCohorts: number,
 }
 
 export interface Cohort {
-  time: Unit,
+  startTime: WeeklyTime,
+  endTime: WeeklyTime,
   /** Map from person type name -> person id */
   people: { [personType: string]: string[] },
 }
@@ -32,7 +35,10 @@ const fromBinary = (binary: string): [string, string, string] => JSON.parse(bina
 const getCohortCount = (t: number): string => `cohortCount-${t}`;
 
 // See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
-export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): Promise<null | Cohort[]> {
+export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput): Promise<null | Cohort[]> {
+  // E.g. if we're quantizing to 30 minute units, and our lengthOfMeetingMins = 2, we want 2 unit-long meetings
+  const lengthOfMeetingInUnits = lengthOfMeetingMins / MINUTES_IN_UNIT;
+
   const personTypeNames = new Set();
   personTypes.forEach(({ name }) => {
     if (personTypeNames.has(name)) {
@@ -61,8 +67,8 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
   let maxT = 0;
   for (const personType of personTypes)
     for (const person of personType.people)
-      for (const timeAv of person.timeAv)
-        for (const t of timeAv) if (t > maxT) maxT = t;
+      for (const interval of person.timeAvUnits)
+        for (const t of interval) if (t > maxT) maxT = t;
 
   // array from 0 to maxT
   const times = Array.from({ length: maxT }, (_, i) => i);
@@ -97,8 +103,8 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
           vars: [{ name: u, coef: 1 }],
           bnds: {
             type: glpk.GLP_UP,
-            ub: person.timeAv.some(
-              ([b, e]) => b <= t && t <= e - lengthOfMeeting
+            ub: person.timeAvUnits.some(
+              ([b, e]) => b <= t && t <= e - lengthOfMeetingInUnits
             )
               ? 1
               : 0,
@@ -107,7 +113,7 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
         });
 
         const meetingVars: string[] = [];
-        for (let i = 0; i < lengthOfMeeting; i++) {
+        for (let i = 0; i < lengthOfMeetingInUnits; i++) {
           meetingVars.push(toBinary(personType, person, t + i));
         }
         nonOverlappingConstraints.push({
@@ -179,31 +185,32 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
     /* PROCESS RESULT
      [{ people: { Participant: [id, ...], Facilitator: [id, ...] }
         time: number }, ...] */
-    const timeslots = {};
+    const timeslots: Record</* unitIndex */ string, Record</* personType */ string, /* personIds */ string[]>> = {};
     for (const binary of Object.keys(res.result.vars)) {
       if (binary.includes("cohortCount")) continue;
       const [personType, person, t] = fromBinary(binary);
       if (res.result.vars[binary] == 1) {
         if (!timeslots[t]) timeslots[t] = {};
-        if (!timeslots[t][personType]) timeslots[t][personType] = [];
-        timeslots[t][personType].push(person);
+        if (!timeslots[t]![personType]) timeslots[t]![personType] = [];
+        timeslots[t]![personType]!.push(person);
       }
     }
 
     const largeCohorts: Cohort[] = [];
     for (const t of Object.keys(timeslots)) {
       largeCohorts.push({
-        time: parseInt(t) as Unit,
-        people: timeslots[t],
+        startTime: parseInt(t) * MINUTES_IN_UNIT as WeeklyTime,
+        endTime: (parseInt(t) + lengthOfMeetingInUnits) * MINUTES_IN_UNIT as WeeklyTime,
+        people: timeslots[t]!,
       });
     }
 
     const cohorts: Cohort[] = [];
     for (const largeCohort of largeCohorts) {
-      const count = res.result.vars[getCohortCount(largeCohort.time)];
-      const cohortCounts = {};
+      const count = res.result.vars[getCohortCount(largeCohort.startTime / MINUTES_IN_UNIT)]!;
+      const cohortCounts: Record</* personType */ string, number[]> = {};
       for (const personType of personTypes) {
-        const people = largeCohort.people[personType.name];
+        const people = largeCohort.people[personType.name]!;
         const n = people.length;
 
         // divide n by count with remainder
@@ -212,23 +219,24 @@ export async function solve({ lengthOfMeeting, personTypes }: SchedulerInput): P
 
         if (!cohortCounts[personType.name]) cohortCounts[personType.name] = [];
         for (let i = 0; i < count - r; i++) {
-          cohortCounts[personType.name].push(k);
+          cohortCounts[personType.name]!.push(k);
         }
         for (let i = 0; i < r; i++) {
-          cohortCounts[personType.name].push(k + 1);
+          cohortCounts[personType.name]!.push(k + 1);
         }
       }
       for (let i = 0; i < count; i++) {
-        const people = {};
+        const people: Record</* personType */ string, /* personIds */ string[]> = {};
         for (const personType of personTypes) {
-          people[personType.name] = largeCohort.people[personType.name].slice(
-            i * cohortCounts[personType.name][i],
-            (i + 1) * cohortCounts[personType.name][i]
+          people[personType.name] = largeCohort.people[personType.name]!.slice(
+            i * cohortCounts[personType.name]![i]!,
+            (i + 1) * cohortCounts[personType.name]![i]!
           );
         }
 
         cohorts.push({
-          time: largeCohort.time,
+          startTime: largeCohort.startTime,
+          endTime: largeCohort.endTime,
           people,
         });
       }

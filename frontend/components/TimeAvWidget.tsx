@@ -1,18 +1,16 @@
 import React from "react";
-import { MINUTE_IN_HOUR, MINUTES_IN_UNIT } from "../../lib/constants";
-import { prettyPrintTime } from "../../lib/format";
-import { Interval, unparseNumber } from "../../lib/parse";
-import { isWithin } from "../../lib/util";
+import { MINUTES_IN_UNIT } from "../../lib/constants";
+import { Interval, WeeklyTime, format, isInInterval } from "weekly-availabilities";
 
-const dayLabels = {
-  0: "Mon",
-  1: "Tue",
-  2: "Wed",
-  3: "Thu",
-  4: "Fri",
-  5: "Sat",
-  6: "Sun",
-};
+const dayLabels = [
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+  "Sun",
+];
 
 /**
  * @returns [0, 1, 2, 3, ..., n - 1]
@@ -28,23 +26,22 @@ export interface TimeAvWidgetProps {
 }
 
 export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
-  const multiplier = MINUTE_IN_HOUR / MINUTES_IN_UNIT;
-
-  const allNumbers = zeroUntilN(7 * 24 * multiplier);
+  const unitsPerHour = 60 / MINUTES_IN_UNIT;
+  const unitIndexes = zeroUntilN(7 * 24 * unitsPerHour);
 
   const cellHeight = 2;
   const leftColumnWidth = 12;
-  const labelFreq = 2;
+  const unitsPerLabel = 2;
 
   return (
     <div>
       <div className="flex">
         <div className={"w-" + leftColumnWidth}></div>
         <div className="grid w-full text-sm grid-cols-7">
-          {zeroUntilN(7).map((d) => {
+          {dayLabels.map((d) => {
             return (
               <div key={d} className="h-8 mx-auto">
-                {dayLabels[d]}
+                {d}
               </div>
             );
           })}
@@ -52,20 +49,20 @@ export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
       </div>
       <div className="flex text-xs">
         <div className={"w-" + leftColumnWidth}>
-          {zeroUntilN(24 * multiplier + 1)
+          {zeroUntilN(24 * unitsPerHour + 1)
             .filter((value) => {
-              return value % labelFreq == 0;
+              return value % unitsPerLabel == 0;
             })
-            .map((time) => {
+            .map((unitTime) => {
               return (
                 <div
-                  key={time}
+                  key={unitTime}
                   className={
-                    "flex justify-end px-1 h-" + labelFreq * cellHeight
+                    "flex justify-end px-1 h-" + unitsPerLabel * cellHeight
                   }
                 >
                   <div className="-translate-y-2">
-                    {prettyPrintTime(unparseNumber(time))}
+                    {format((unitTime * MINUTES_IN_UNIT) as WeeklyTime).slice(1)}
                   </div>
                 </div>
               );
@@ -76,12 +73,12 @@ export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
             className="grid grid-flow-col border-t border-l border-solid border-gray-800"
             style={{ gridTemplateRows: "repeat(48, minmax(0, 1fr))" }}
           >
-            {allNumbers.map((number) => {
+            {unitIndexes.map((number) => {
               const relevantAvailabilities = availabilities.filter(a =>
-                a.intervals.some(interval => isWithin(interval, number))
+                a.intervals.some(interval => isInInterval(interval, number * MINUTES_IN_UNIT as WeeklyTime))
               )
 
-              const isEven = Math.floor(number) % labelFreq == 0;
+              const isEven = Math.floor(number) % unitsPerLabel == 0;
               return (
                 <div
                   key={number}
