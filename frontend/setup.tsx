@@ -19,7 +19,7 @@ import { FieldType } from "@airtable/blocks/models";
 import React, { useMemo, useState } from "react";
 import { Preset } from ".";
 import { MS_IN_WEEK, MINUTES_IN_UNIT } from "../lib/constants";
-import { renderDuration } from "../lib/format";
+import { renderDuration } from "../lib/renderDuration";
 import { newUID } from "../lib/util";
 import { FixedNumberInput } from "./components/FixedNumberInput";
 
