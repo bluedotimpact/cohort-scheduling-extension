@@ -18,8 +18,9 @@ To start developing this extension:
 2. Install [Node.js](https://nodejs.org/)
 3. Run `npm install`
 4. Run `npm start` (for the '[local] Scheduling Extension' in the BlueDot Impact software AirTable account)
-5. Load the relevant base
-6. Make changes to the code and see them reflected in the app!
+5. Load the relevant base, open the extensions panel, and click 'Edit extension'
+6. Paste in the URL output in the terminal
+7. Make changes to the code and see them reflected in the app!
 
 If the changes don't appear to be updating the app, try clicking the extension name then 'Edit extension', then pasting in the server address printed to the console from step 4 (probably `https://localhost:9000`).
 

@@ -36,7 +36,7 @@ const getCohortCount = (t: number): string => `cohortCount-${t}`;
 
 // See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
 export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput): Promise<null | Cohort[]> {
-  // E.g. if we're quantizing to 30 minute units, and our lengthOfMeetingMins = 2, we want 2 unit-long meetings
+  // E.g. if we're quantizing to 15 minute units, and our lengthOfMeetingMins = 60, we want 4 unit-long meetings
   const lengthOfMeetingInUnits = lengthOfMeetingMins / MINUTES_IN_UNIT;
 
   const personTypeNames = new Set();

@@ -312,8 +312,8 @@ const AlgorithmPage = () => {
                   name: record.getCellValueAsString(table.primaryField.id),
                   timeAvMins,
                   timeAvUnits: timeAvMins.map(([s, e]) => [
-                    expectInteger(s / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 30 minute blocks'),
-                    expectInteger(e / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 30 minute blocks')
+                    expectInteger(s / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 15 minute blocks'),
+                    expectInteger(e / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 15 minute blocks')
                   ]),
                   howManyCohorts:
                   typeof personType.howManyCohortsPerType === "string"
