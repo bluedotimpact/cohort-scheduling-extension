@@ -29,9 +29,9 @@ export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
   const unitsPerHour = 60 / MINUTES_IN_UNIT;
   const unitIndexes = zeroUntilN(7 * 24 * unitsPerHour);
 
-  const cellHeight = 2;
+  const cellHeight = 1.5;
   const leftColumnWidth = 12;
-  const unitsPerLabel = 2;
+  const unitsPerLabel = unitsPerHour / 2;
 
   return (
     <div>
@@ -71,7 +71,7 @@ export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
         <div className="w-full">
           <div
             className="grid grid-flow-col border-t border-l border-solid border-gray-800"
-            style={{ gridTemplateRows: "repeat(48, minmax(0, 1fr))" }}
+            style={{ gridTemplateRows: "repeat(" + (24 * unitsPerHour) + ", minmax(0, 1fr))" }}
           >
             {unitIndexes.map((number) => {
               const relevantAvailabilities = availabilities.filter(a =>
@@ -82,7 +82,7 @@ export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
               return (
                 <div
                   key={number}
-                  className="h-2 relative border-r border-b border-gray-800 border-r-solid" style={{ borderBottomStyle: isEven ? "dotted" : "solid" }} >
+                  className={`h-${cellHeight} relative border-r border-b border-gray-800 border-r-solid`} style={{ borderBottomStyle: isEven ? "dotted" : "solid" }} >
                   {relevantAvailabilities.map((a, i) => (
                     <div key={i} className={"absolute inset-0 w-full h-full " + a.class} style={{ opacity: a.opacity }} />
                   ))}
