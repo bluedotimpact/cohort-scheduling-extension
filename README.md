@@ -1,6 +1,6 @@
 # cohort-scheduling-extension ![deployment automatic](https://img.shields.io/badge/deployment-automatic-success)
 
-Airtable extension for flexibly finding overlapping cohorts from people's time availability. Integrates with data from the [Time availability from](https://github.com/bluedot-impact-software/time-availability-form).
+Airtable extension for flexibly finding overlapping cohorts from people's time availability. Integrates with data from the [time availability from](https://github.com/bluedotimpact/bluedot/tree/master/apps/availability).
 
 The algorithm backing the cohort finding is a conversion of the problem into a Linear Programming (LP) form and then using the constraint solver [GLPK](https://github.com/jvail/glpk.js/).
 
