@@ -444,6 +444,13 @@ const SetupPage = () => {
                   globalConfigKey={[...path, "cohortsIterationField"]}
                 />
               </FormField>
+              <FormField label="Bucket field">
+                <FieldPickerSynced
+                  table={cohortsTable}
+                  allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS, FieldType.MULTIPLE_LOOKUP_VALUES]}
+                  globalConfigKey={[...path, "cohortsBucketField"]}
+                />
+              </FormField>
             </div>
           )}
         </div>

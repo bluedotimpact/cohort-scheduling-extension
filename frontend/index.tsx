@@ -31,6 +31,7 @@ export type Preset = {
   cohortsTableStartDateField?: string;
   cohortsTableEndDateField?: string;
   cohortsIterationField?: string;
+  cohortsBucketField?: string;
 };
 
 const createPreset = (name: string) => ({

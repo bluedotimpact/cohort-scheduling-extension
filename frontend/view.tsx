@@ -44,6 +44,8 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
       preset.cohortsTableStartDateField,
       preset.cohortsTableEndDateField,
       preset.cohortsIterationField,
+      preset.cohortsBucketField,
+      personType.cohortsTableField,
     ],
   });
   const cohortsWithTimes = rawCohorts.flatMap((cohort) => {
@@ -63,6 +65,8 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
       name: cohort.name,
       iteration: cohort.getCellValueAsString(preset.cohortsIterationField!),
       timeAv: meetingDates.map((d) => fromDate(d)) as Interval,
+      bucket: preset.cohortsBucketField ? cohort.getCellValueAsString(preset.cohortsBucketField) : "Unknown",
+      participantCount: (cohort.getCellValue(personType.cohortsTableField!) as string[])?.length,
     };
   });
 
@@ -121,6 +125,8 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
         <div className="w-full rounded border border-solid border-gray-200 max-h-72 overflow-auto">
           <div className="flex bg-slate-100 p-1 font-medium">
             <div style={{ flex: "4 1 0" }}>Cohort</div>
+            <div style={{ flex: "2 1 0" }}>Bucket</div>
+            <div style={{ flex: "1 1 0" }}># participants</div>
             <div style={{ flex: "1 1 0" }}>Meeting time</div>
           </div>
           <div className="w-full bg-white divide-y divide-gray-200">
@@ -142,6 +148,10 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
                     >
                       <CohortBlob name={cohort.name} />
                     </div>
+                    <div style={{ flex: "2 1 0" }}>
+                      {cohort.bucket}
+                    </div>
+                    <div style={{ flex: "1 1 0" }}>{cohort.participantCount}</div>
                     <div style={{ flex: "1 1 0" }}>
                       {format(cohort.timeAv).replace(" ", " – ")}
                     </div>
