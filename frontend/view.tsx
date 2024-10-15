@@ -122,9 +122,9 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
           {hoveredCohort ? `Overlaying cohort ${hoveredCohort.name}` : "Hover over a cohort to view its overlap"}
         </span>
         <div className="h-2" />
-        <div className="w-full rounded border border-solid border-gray-200 max-h-72 overflow-auto">
+        <div className="w-full rounded border border-solid border-gray-200 overflow-auto">
           <div className="flex bg-slate-100 p-1 font-medium">
-            <div style={{ flex: "4 1 0" }}>Cohort</div>
+            <div style={{ flex: "3 1 0" }}>Cohort</div>
             <div style={{ flex: "2 1 0" }}>Bucket</div>
             <div style={{ flex: "1 1 0" }}># participants</div>
             <div style={{ flex: "1 1 0" }}>Meeting time</div>
@@ -141,7 +141,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
                   >
                     <div
                       className="flex"
-                      style={{ flex: "4 1 0" }}
+                      style={{ flex: "3 1 0" }}
                       onClick={() =>
                         expandRecord(rawCohorts.find((c) => c.id === cohort.id)!)
                       }
