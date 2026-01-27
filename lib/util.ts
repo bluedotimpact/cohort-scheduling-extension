@@ -43,24 +43,24 @@ export async function getFacilitatorBlockedTimes({
     return [];
   }
 
-  const roundRecords = await roundsTable.selectRecordsAsync({
-    fields: ['Status'],
-  });
+  // Fetch rounds and cohorts in parallel
+  const [roundRecords, cohortRecords] = await Promise.all([
+    roundsTable.selectRecordsAsync({ fields: ['Status'] }),
+    cohortsTable.selectRecordsAsync({
+      fields: [
+        preset.cohortsTableStartDateField!,
+        preset.cohortsTableEndDateField!,
+        preset.cohortsIterationField!,
+        '[>] Facilitator email',
+      ],
+    }),
+  ]);
 
   // Get active round IDs
   const activeRoundIds = new Set(
     roundRecords.records.filter((r) => r.getCellValueAsString('Status') === 'Active').map((r) => r.id),
   );
   roundRecords.unloadData();
-
-  const cohortRecords = await cohortsTable.selectRecordsAsync({
-    fields: [
-      preset.cohortsTableStartDateField!,
-      preset.cohortsTableEndDateField!,
-      preset.cohortsIterationField!,
-      '[>] Facilitator email',
-    ],
-  });
 
   const blockedIntervals: Interval[] = [];
 
