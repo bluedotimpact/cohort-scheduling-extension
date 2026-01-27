@@ -32,6 +32,7 @@ export type Preset = {
   cohortsTableEndDateField?: string;
   cohortsIterationField?: string;
   cohortsBucketField?: string;
+  facilitatorEmailLookupField?: string;
 };
 
 const createPreset = (name: string) => ({

@@ -451,6 +451,13 @@ const SetupPage = () => {
                   globalConfigKey={[...path, "cohortsBucketField"]}
                 />
               </FormField>
+              <FormField label="Facilitator email lookup field">
+                <FieldPickerSynced
+                  table={cohortsTable}
+                  allowedTypes={[FieldType.MULTIPLE_LOOKUP_VALUES]}
+                  globalConfigKey={[...path, "facilitatorEmailLookupField"]}
+                />
+              </FormField>
             </div>
           )}
         </div>
