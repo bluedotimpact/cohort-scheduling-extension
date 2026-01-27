@@ -51,7 +51,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
     ],
   });
 
-  const [blockedTimes, setBlockedTimes] = useState<Interval[]>([]);
+  const [facilitatorBlockedTimes, setFacilitatorBlockedTimes] = useState<Interval[]>([]);
 
   useEffect(() => {
     const fetchBlockedTimes = async () => {
@@ -62,7 +62,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
         preset,
       });
 
-      setBlockedTimes(times);
+      setFacilitatorBlockedTimes(times);
     }
 
     fetchBlockedTimes();
@@ -122,7 +122,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
           availabilities={[{
             intervals: personTimeAv,
             class: "bg-green-500",
-          }, { intervals: blockedTimes,
+          }, { intervals: facilitatorBlockedTimes,
             class: "bg-red-500",
             opacity: 0.9,
           }, {
