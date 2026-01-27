@@ -40,6 +40,12 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
 
   const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!)!;
 
+  // Get email field ID from the lookup field's options
+  const facilitatorEmailLookupField = preset.facilitatorEmailLookupField
+    ? cohortsTable.fields.find((f) => f.id === preset.facilitatorEmailLookupField)
+    : null;
+  const emailFieldId = facilitatorEmailLookupField?.options?.fieldIdInLinkedTable as string | undefined;
+
   const rawCohorts = useRecords(cohortsTable, {
     fields: [
       preset.cohortsTableStartDateField,
@@ -47,15 +53,20 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
       preset.cohortsIterationField,
       preset.cohortsBucketField,
       personType.cohortsTableField,
-      '[>] Facilitator email'
-    ],
+      preset.facilitatorEmailLookupField,
+    ].filter(Boolean) as string[],
   });
 
   const [facilitatorBlockedTimes, setFacilitatorBlockedTimes] = useState<Interval[]>([]);
 
   useEffect(() => {
+    if (!emailFieldId) {
+      setFacilitatorBlockedTimes([]);
+      return;
+    }
+
     const fetchBlockedTimes = async () => {
-      const facilitatorEmail = record.getCellValueAsString('email');
+      const facilitatorEmail = record.getCellValueAsString(emailFieldId);
       const times = await getFacilitatorBlockedTimes({
         base,
         facilitatorEmail,
@@ -66,7 +77,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
     }
 
     fetchBlockedTimes();
-  }, [base, record, cohortsTable, preset]);
+  }, [base, record, cohortsTable, preset, emailFieldId]);
 
   const cohortsWithTimes = rawCohorts.flatMap((cohort) => {
     const meetingDates = [
