@@ -18,6 +18,7 @@ import { CohortBlob, PersonBlob } from "./components/Blobs";
 import { TimeAvWidget, TimeAvWidgetProps } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
 import { format, fromDate, parseIntervals, Interval, calculateScheduleOverlap } from "weekly-availabilities";
+import { getFacilitatorBlockedTimes } from "../lib/util";
 
 const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, recordId }) => {
   const globalConfig = useGlobalConfig();
@@ -46,8 +47,27 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
       preset.cohortsIterationField,
       preset.cohortsBucketField,
       personType.cohortsTableField,
+      '[>] Facilitator email'
     ],
   });
+
+  const [blockedTimes, setBlockedTimes] = useState<Interval[]>([]);
+
+  useEffect(() => {
+    const fetchBlockedTimes = async () => {
+      const facilitatorEmail = record.getCellValueAsString('email');
+      const times = await getFacilitatorBlockedTimes({
+        base,
+        facilitatorEmail,
+        preset,
+      });
+
+      setBlockedTimes(times);
+    }
+
+    fetchBlockedTimes();
+  }, [base, record, cohortsTable, preset]);
+
   const cohortsWithTimes = rawCohorts.flatMap((cohort) => {
     const meetingDates = [
       // getCellValueAsString returns something that can't be parsed by the date constructor
@@ -102,6 +122,9 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
           availabilities={[{
             intervals: personTimeAv,
             class: "bg-green-500",
+          }, { intervals: blockedTimes,
+            class: "bg-red-500",
+            opacity: 0.9,
           }, {
             intervals: hoveredCohort ? [hoveredCohort.timeAv] : [],
             class: "bg-purple-500",
