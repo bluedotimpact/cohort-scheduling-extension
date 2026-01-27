@@ -227,7 +227,6 @@ export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facil
     return [...acc, ...people];
   }, []);
 
-  // Fetch facilitator's blocked times
   useEffect(() => {
     if (!facilitatorEmail) {
       setFacilitatorBlockedTimes([]);

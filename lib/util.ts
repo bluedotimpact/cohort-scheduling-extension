@@ -30,7 +30,7 @@ export async function getFacilitatorBlockedTimes({
     throw new Error('Could not find cohorts table');
   }
 
-  // Get the rounds table from the iteration field's linked table
+  // Get the rounds table via iteration field's linked table
   const iterationField = cohortsTable.fields.find((f) => f.id === preset.cohortsIterationField!);
   const roundsTableId = iterationField?.options?.linkedTableId as string | undefined;
   if (!roundsTableId) {
@@ -56,7 +56,6 @@ export async function getFacilitatorBlockedTimes({
     }),
   ]);
 
-  // Get active round IDs
   const activeRoundIds = new Set(
     roundRecords.records.filter((r) => r.getCellValueAsString('Status') === 'Active').map((r) => r.id),
   );
