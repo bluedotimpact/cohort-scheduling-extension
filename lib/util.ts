@@ -21,7 +21,7 @@ export async function getFacilitatorBlockedTimes({
   facilitatorEmail: string;
   preset: Preset;
 }): Promise<Interval[]> {
-  if (!facilitatorEmail) {
+  if (!facilitatorEmail || !preset.facilitatorEmailLookupField) {
     return [];
   }
 
@@ -51,7 +51,7 @@ export async function getFacilitatorBlockedTimes({
         preset.cohortsTableStartDateField!,
         preset.cohortsTableEndDateField!,
         preset.cohortsIterationField!,
-        '[>] Facilitator email',
+        preset.facilitatorEmailLookupField,
       ],
     }),
   ]);
@@ -65,7 +65,7 @@ export async function getFacilitatorBlockedTimes({
 
   for (const group of cohortRecords.records) {
     // Check correct facilitator
-    const cohortFacilitatorEmail = group.getCellValueAsString('[>] Facilitator email');
+    const cohortFacilitatorEmail = group.getCellValueAsString(preset.facilitatorEmailLookupField);
     if (cohortFacilitatorEmail !== facilitatorEmail) continue;
 
     // Check linked round is active
