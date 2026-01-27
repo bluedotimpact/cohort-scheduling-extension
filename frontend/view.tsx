@@ -189,7 +189,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
   }
 };
 
-export const ViewCohort = ({ cohort }: { cohort: Cohort }) => {
+export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facilitatorEmail?: string }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
@@ -365,7 +365,9 @@ const ViewCohortWrapper = ({ recordId }: { recordId: string }) => {
     people,
   };
 
-  return <ViewCohort cohort={cohort} />;
+  const facilitatorEmail = cohortRecord.getCellValueAsString('[>] Facilitator email');
+
+  return <ViewCohort cohort={cohort} facilitatorEmail={facilitatorEmail} />;
 };
 
 const ViewPage = () => {
