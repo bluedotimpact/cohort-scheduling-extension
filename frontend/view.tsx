@@ -198,6 +198,8 @@ export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facil
   const base = useBase();
 
   const [hoveredPerson, setHoveredPerson] = useState<null | (AirtableRecord & { timeAv: Interval[] })>(null);
+  const [facilitatorBlockedTimes, setFacilitatorBlockedTimes] = useState<Interval[]>([]);
+
   useEffect(() => {
     setHoveredPerson(null);
   }, [cohort]);
@@ -224,6 +226,26 @@ export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facil
     });
     return [...acc, ...people];
   }, []);
+
+  // Fetch facilitator's blocked times
+  useEffect(() => {
+    if (!facilitatorEmail) {
+      setFacilitatorBlockedTimes([]);
+      return;
+    }
+
+    const fetchBlockedTimes = async () => {
+      const times = await getFacilitatorBlockedTimes({
+        base,
+        facilitatorEmail,
+        preset,
+      });
+
+      setFacilitatorBlockedTimes(times);
+    }
+
+    fetchBlockedTimes();
+  }, [facilitatorEmail, base, preset]);
 
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
@@ -272,15 +294,23 @@ export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facil
     class: "bg-purple-500",
   }
   const [showAgreedTime, setShowAgreedTime] = useState(true);
-  const availabilities: TimeAvWidgetProps["availabilities"] = [(hoveredPerson ? [{
-    intervals: hoveredPerson.timeAv,
-    class: "bg-green-500",
-    opacity: 0.3,
-  }] : Object.entries(availabilitiesByCount).map(([count, intervals]) => ({
-    intervals,
-    class: "bg-green-500",
-    opacity: parseInt(count) / allPeople.length,
-  }))), (showAgreedTime ? [agreedTime] : [])].flat(1)
+  const availabilities: TimeAvWidgetProps["availabilities"] = [
+    (hoveredPerson ? [{
+      intervals: hoveredPerson.timeAv,
+      class: "bg-green-500",
+      opacity: 0.3,
+    }] : Object.entries(availabilitiesByCount).map(([count, intervals]) => ({
+      intervals,
+      class: "bg-green-500",
+      opacity: parseInt(count) / allPeople.length,
+    }))),
+    [{
+      intervals: facilitatorBlockedTimes,
+      class: "bg-red-500",
+      opacity: 0.9,
+    }],
+    (showAgreedTime ? [agreedTime] : []),
+  ].flat(1)
 
   return (
     <>
