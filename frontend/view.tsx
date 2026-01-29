@@ -18,6 +18,7 @@ import { CohortBlob, PersonBlob } from "./components/Blobs";
 import { TimeAvWidget, TimeAvWidgetProps } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
 import { format, fromDate, parseIntervals, Interval, calculateScheduleOverlap } from "weekly-availabilities";
+import { getFacilitatorBlockedTimes } from "../lib/util";
 
 const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, recordId }) => {
   const globalConfig = useGlobalConfig();
@@ -39,6 +40,12 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
 
   const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!)!;
 
+  // Get email field ID from the lookup field's options
+  const facilitatorEmailLookupField = preset.facilitatorEmailLookupField
+    ? cohortsTable.fields.find((f) => f.id === preset.facilitatorEmailLookupField)
+    : null;
+  const emailFieldId = facilitatorEmailLookupField?.options?.fieldIdInLinkedTable as string | undefined;
+
   const rawCohorts = useRecords(cohortsTable, {
     fields: [
       preset.cohortsTableStartDateField,
@@ -46,8 +53,32 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
       preset.cohortsIterationField,
       preset.cohortsBucketField,
       personType.cohortsTableField,
-    ],
+      preset.facilitatorEmailLookupField,
+    ].filter(Boolean) as string[],
   });
+
+  const [facilitatorBlockedTimes, setFacilitatorBlockedTimes] = useState<Interval[]>([]);
+
+  useEffect(() => {
+    if (!emailFieldId) {
+      setFacilitatorBlockedTimes([]);
+      return;
+    }
+
+    const fetchBlockedTimes = async () => {
+      const facilitatorEmail = record.getCellValueAsString(emailFieldId);
+      const times = await getFacilitatorBlockedTimes({
+        base,
+        facilitatorEmail,
+        preset,
+      });
+
+      setFacilitatorBlockedTimes(times);
+    }
+
+    fetchBlockedTimes();
+  }, [base, record, cohortsTable, preset, emailFieldId]);
+
   const cohortsWithTimes = rawCohorts.flatMap((cohort) => {
     const meetingDates = [
       // getCellValueAsString returns something that can't be parsed by the date constructor
@@ -102,6 +133,9 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
           availabilities={[{
             intervals: personTimeAv,
             class: "bg-green-500",
+          }, { intervals: facilitatorBlockedTimes,
+            class: "bg-red-500",
+            opacity: 0.9,
           }, {
             intervals: hoveredCohort ? [hoveredCohort.timeAv] : [],
             class: "bg-purple-500",
@@ -166,7 +200,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
   }
 };
 
-export const ViewCohort = ({ cohort }: { cohort: Cohort }) => {
+export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facilitatorEmail?: string | undefined }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
@@ -175,6 +209,8 @@ export const ViewCohort = ({ cohort }: { cohort: Cohort }) => {
   const base = useBase();
 
   const [hoveredPerson, setHoveredPerson] = useState<null | (AirtableRecord & { timeAv: Interval[] })>(null);
+  const [facilitatorBlockedTimes, setFacilitatorBlockedTimes] = useState<Interval[]>([]);
+
   useEffect(() => {
     setHoveredPerson(null);
   }, [cohort]);
@@ -201,6 +237,25 @@ export const ViewCohort = ({ cohort }: { cohort: Cohort }) => {
     });
     return [...acc, ...people];
   }, []);
+
+  useEffect(() => {
+    if (!facilitatorEmail) {
+      setFacilitatorBlockedTimes([]);
+      return;
+    }
+
+    const fetchBlockedTimes = async () => {
+      const times = await getFacilitatorBlockedTimes({
+        base,
+        facilitatorEmail,
+        preset,
+      });
+
+      setFacilitatorBlockedTimes(times);
+    }
+
+    fetchBlockedTimes();
+  }, [facilitatorEmail, base, preset]);
 
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
@@ -249,15 +304,23 @@ export const ViewCohort = ({ cohort }: { cohort: Cohort }) => {
     class: "bg-purple-500",
   }
   const [showAgreedTime, setShowAgreedTime] = useState(true);
-  const availabilities: TimeAvWidgetProps["availabilities"] = [(hoveredPerson ? [{
-    intervals: hoveredPerson.timeAv,
-    class: "bg-green-500",
-    opacity: 0.3,
-  }] : Object.entries(availabilitiesByCount).map(([count, intervals]) => ({
-    intervals,
-    class: "bg-green-500",
-    opacity: parseInt(count) / allPeople.length,
-  }))), (showAgreedTime ? [agreedTime] : [])].flat(1)
+  const availabilities: TimeAvWidgetProps["availabilities"] = [
+    (hoveredPerson ? [{
+      intervals: hoveredPerson.timeAv,
+      class: "bg-green-500",
+      opacity: 0.3,
+    }] : Object.entries(availabilitiesByCount).map(([count, intervals]) => ({
+      intervals,
+      class: "bg-green-500",
+      opacity: parseInt(count) / allPeople.length,
+    }))),
+    [{
+      intervals: facilitatorBlockedTimes,
+      class: "bg-red-500",
+      opacity: 0.9,
+    }],
+    (showAgreedTime ? [agreedTime] : []),
+  ].flat(1)
 
   return (
     <>
@@ -342,7 +405,11 @@ const ViewCohortWrapper = ({ recordId }: { recordId: string }) => {
     people,
   };
 
-  return <ViewCohort cohort={cohort} />;
+  const facilitatorEmail = preset.facilitatorEmailLookupField
+    ? cohortRecord.getCellValueAsString(preset.facilitatorEmailLookupField)
+    : undefined;
+
+  return <ViewCohort cohort={cohort} facilitatorEmail={facilitatorEmail} />;
 };
 
 const ViewPage = () => {
