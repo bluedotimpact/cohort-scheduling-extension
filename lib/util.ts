@@ -16,15 +16,23 @@ function dateRangesOverlap(start1: Date, end1: Date, start2: Date, end2: Date): 
 }
 
 /** Facilitators can facilitate multiple rounds simultaneously. We want to avoid scheduling a facilitator at a time they
- * are already unavailable. This matches by email since facilitators have different record IDs across rounds. */
+ * are already unavailable. This matches by email since facilitators have different record IDs across rounds.
+ *
+ * If targetRoundStart/End are provided, only blocks times for rounds that overlap with that date range.
+ * Otherwise (for view display), blocks times for all active rounds.
+ */
 export async function getFacilitatorBlockedTimes({
   base,
   facilitatorEmail,
   preset,
+  targetRoundStart,
+  targetRoundEnd,
 }: {
   base: Base;
   facilitatorEmail: string;
   preset: Preset;
+  targetRoundStart?: Date;
+  targetRoundEnd?: Date;
 }): Promise<Interval[]> {
   if (!facilitatorEmail || !preset.facilitatorEmailLookupField) {
     return [];
@@ -87,8 +95,17 @@ export async function getFacilitatorBlockedTimes({
     const round = roundInfo.get(roundId);
     if (!round) continue;
 
-    const startDate = new Date(group.getCellValue(preset.cohortsTableStartDateField!) as string);
-    const endDate = new Date(group.getCellValue(preset.cohortsTableEndDateField!) as string);
+    // If target round dates provided, check for overlap
+    if (
+      targetRoundStart &&
+      targetRoundEnd &&
+      !dateRangesOverlap(round.startDate, round.endDate, targetRoundStart, targetRoundEnd)
+    ) {
+      continue;
+    }
+
+    const startDate = new Date(group.getCellValueAsString(preset.cohortsTableStartDateField!));
+    const endDate = new Date(group.getCellValueAsString(preset.cohortsTableEndDateField!));
 
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       continue;
