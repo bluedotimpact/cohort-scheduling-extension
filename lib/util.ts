@@ -10,6 +10,11 @@ export function newUID() {
   return Math.random().toString(36).substring(2, 10);
 }
 
+/** Check if two date ranges overlap */
+function dateRangesOverlap(start1: Date, end1: Date, start2: Date, end2: Date): boolean {
+  return start1 <= end2 && start2 <= end1;
+}
+
 /** Facilitators can facilitate multiple rounds simultaneously. We want to avoid scheduling a facilitator at a time they
  * are already unavailable. This matches by email since facilitators have different record IDs across rounds. */
 export async function getFacilitatorBlockedTimes({
