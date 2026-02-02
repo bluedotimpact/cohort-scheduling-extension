@@ -87,3 +87,39 @@ export async function getFacilitatorBlockedTimes({
 
   return blockedIntervals;
 }
+
+// TODO: move to `weekly-availabilities`
+/** Subtract blocked intervals from availability intervals.
+ * Returns new availability with blocked times removed. */
+export function subtractIntervals(availability: Interval[], blocked: Interval[]): Interval[] {
+  if (blocked.length === 0) return availability;
+
+  const result: Interval[] = [];
+
+  for (const [availStart, availEnd] of availability) {
+    let remaining: Interval[] = [[availStart, availEnd]];
+
+    for (const [blockStart, blockEnd] of blocked) {
+      const newRemaining: Interval[] = [];
+
+      for (const [remStart, remEnd] of remaining) {
+        if (blockEnd <= remStart || blockStart >= remEnd) {
+          newRemaining.push([remStart, remEnd]);
+        } else {
+          if (remStart < blockStart) {
+            newRemaining.push([remStart, blockStart]);
+          }
+          if (remEnd > blockEnd) {
+            newRemaining.push([blockEnd, remEnd]);
+          }
+        }
+      }
+
+      remaining = newRemaining;
+    }
+
+    result.push(...remaining);
+  }
+
+  return result;
+}
