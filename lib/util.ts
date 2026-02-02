@@ -45,7 +45,7 @@ export async function getFacilitatorBlockedTimes({
 
   // Fetch rounds and cohorts in parallel
   const [roundRecords, cohortRecords] = await Promise.all([
-    roundsTable.selectRecordsAsync({ fields: ['Status'] }),
+    roundsTable.selectRecordsAsync({ fields: ['Status', 'Start date', 'Last discussion date'] }),
     cohortsTable.selectRecordsAsync({
       fields: [
         preset.cohortsTableStartDateField!,
@@ -56,9 +56,15 @@ export async function getFacilitatorBlockedTimes({
     }),
   ]);
 
-  const activeRoundIds = new Set(
-    roundRecords.records.filter((r) => r.getCellValueAsString('Status') === 'Active').map((r) => r.id),
-  );
+  // Build map of active round IDs -> { startDate, endDate }
+  const roundInfo = new Map<string, { startDate: Date; endDate: Date }>();
+  for (const r of roundRecords.records) {
+    const isActive = r.getCellValueAsString('Status') === 'Active';
+    if (!isActive) continue;
+    const startDate = new Date(r.getCellValueAsString('Start date'));
+    const endDate = new Date(r.getCellValueAsString('Last discussion date'));
+    roundInfo.set(r.id, { startDate, endDate });
+  }
   roundRecords.unloadData();
 
   const blockedIntervals: Interval[] = [];
@@ -68,10 +74,13 @@ export async function getFacilitatorBlockedTimes({
     const cohortFacilitatorEmail = group.getCellValueAsString(preset.facilitatorEmailLookupField);
     if (cohortFacilitatorEmail !== facilitatorEmail) continue;
 
-    // Check linked round is active
+    // Get linked round info
     const linkedRound = group.getCellValue(preset.cohortsIterationField!) as Array<{ id: string }> | null;
     const roundId = linkedRound?.[0]?.id;
-    if (!roundId || !activeRoundIds.has(roundId)) continue;
+    if (!roundId) continue;
+
+    const round = roundInfo.get(roundId);
+    if (!round) continue;
 
     const startDate = new Date(group.getCellValue(preset.cohortsTableStartDateField!) as string);
     const endDate = new Date(group.getCellValue(preset.cohortsTableEndDateField!) as string);
