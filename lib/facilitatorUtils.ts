@@ -55,6 +55,7 @@ export async function getFacilitatorBlockedTimes({
     if (!isActive) continue;
     const startDate = new Date(r.getCellValueAsString(ROUND_START_DATE_FIELD_NAME));
     const endDate = new Date(r.getCellValueAsString(ROUND_END_DATE_FIELD_NAME));
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) continue;
     roundInfo.set(r.id, { startDate, endDate });
   }
   roundRecords.unloadData();
@@ -135,8 +136,9 @@ export async function getTargetRoundDates(
 
   if (!record) return null;
 
-  return {
-    start: new Date(record.getCellValueAsString(ROUND_START_DATE_FIELD_NAME)),
-    end: new Date(record.getCellValueAsString(ROUND_END_DATE_FIELD_NAME)),
-  };
+  const start = new Date(record.getCellValueAsString(ROUND_START_DATE_FIELD_NAME));
+  const end = new Date(record.getCellValueAsString(ROUND_END_DATE_FIELD_NAME));
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+
+  return { start, end };
 }
