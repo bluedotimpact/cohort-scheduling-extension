@@ -309,7 +309,7 @@ const AlgorithmPage = () => {
             fields: fieldsToFetch.filter(Boolean) as string[],
           })).records
 
-          // Get target round from Facilitator's iteration field
+          // Get target round from Facilitator's information
           if (personType.name === 'Facilitator' && personType.iterationField && peopleRecords.length > 0 && !targetRoundDates && cohortsTable) {
             const firstPersonRound = peopleRecords[0]?.getCellValue(personType.iterationField) as Array<{ id: string }> | null;
             const targetRoundId = firstPersonRound?.[0]?.id;
