@@ -1,6 +1,7 @@
 import type { Base } from '@airtable/blocks/models';
 import { fromDate, type Interval } from 'weekly-availabilities';
 import type { Preset } from '../frontend';
+import { getRoundsTable } from './facilitatorUtils';
 
 export async function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,17 +44,9 @@ export async function getFacilitatorBlockedTimes({
     throw new Error('Could not find cohorts table');
   }
 
-  // Get the rounds table via iteration field's linked table
-  const iterationField = cohortsTable.fields.find((f) => f.id === preset.cohortsIterationField!);
-  const roundsTableId = iterationField?.options?.linkedTableId as string | undefined;
-  if (!roundsTableId) {
-    console.warn('Could not find rounds table - skipping blocked time calculation');
-    return [];
-  }
-  const roundsTable = base.getTableByIdIfExists(roundsTableId);
+  const roundsTable = getRoundsTable(base, cohortsTable, preset);
   if (!roundsTable) {
-    console.warn('Could not access rounds table - skipping blocked time calculation');
-    return [];
+    throw new Error('Could not find rounds table');
   }
 
   // Fetch rounds and cohorts in parallel
