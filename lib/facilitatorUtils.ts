@@ -37,7 +37,7 @@ export async function getFacilitatorBlockedTimes({
 
   // Fetch rounds and cohorts in parallel
   const [roundRecords, cohortRecords] = await Promise.all([
-    roundsTable.selectRecordsAsync({ fields: ['Status', ROUND_START_DATE_FIELD_NAME,ROUND_END_DATE_FIELD_NAME] }),
+    roundsTable.selectRecordsAsync({ fields: ['Status', ROUND_START_DATE_FIELD_NAME, ROUND_END_DATE_FIELD_NAME] }),
     cohortsTable.selectRecordsAsync({
       fields: [
         preset.cohortsTableStartDateField!,
