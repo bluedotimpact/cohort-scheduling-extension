@@ -20,7 +20,7 @@ import { ViewCohort } from "./view";
 import { parseIntervals, toDate } from "weekly-availabilities";
 import { MINUTES_IN_UNIT } from "../lib/constants";
 import { expectInteger } from "../lib/expectInteger";
-import { getEmailFieldId, getFacilitatorBlockedTimes, getRoundsTable } from "../lib/facilitatorUtils";
+import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
 
 interface SolutionProps {
   solution: Cohort[],
@@ -267,9 +267,7 @@ const AlgorithmPage = () => {
   useEffect(() => {
     const generateGrandInput = async () => {
       try {
-        let targetRoundStart: Date | undefined;
-        let targetRoundEnd: Date | undefined;
-
+        let targetRoundDates: { start: Date; end: Date } | null = null;
         const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!);
         const emailFieldId = getEmailFieldId(cohortsTable!, preset);
 
@@ -312,22 +310,12 @@ const AlgorithmPage = () => {
           })).records
 
           // Get target round from first person's iteration field
-          if (personType.name === 'Facilitator' && personType.iterationField && peopleRecords.length > 0 && !targetRoundStart && cohortsTable) {
+          if (personType.name === 'Facilitator' && personType.iterationField && peopleRecords.length > 0 && !targetRoundDates && cohortsTable) {
             const firstPersonRound = peopleRecords[0]?.getCellValue(personType.iterationField) as Array<{ id: string }> | null;
             const targetRoundId = firstPersonRound?.[0]?.id;
-            const roundsTable = getRoundsTable(base, cohortsTable, preset);
 
-            if (targetRoundId && roundsTable) {
-              const roundRecords = await roundsTable.selectRecordsAsync({
-                fields: ['Start date', 'Last discussion date'],
-              });
-
-              const record = roundRecords.records.find(r => r.id === targetRoundId);
-              if (record) {
-                targetRoundStart = new Date(record.getCellValueAsString('Start date'));
-                targetRoundEnd = new Date(record.getCellValueAsString('Last discussion date'));
-              }
-              roundRecords.unloadData();
+            if (targetRoundId) {
+              targetRoundDates = await getTargetRoundDates(base, targetRoundId, cohortsTable, preset);
             }
           }
 
@@ -337,15 +325,15 @@ const AlgorithmPage = () => {
               let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
 
               // For facilitators, subtract blocked times from other active rounds
-              if (personType.name === 'Facilitator' && emailFieldId && targetRoundStart && targetRoundEnd) {
+              if (personType.name === 'Facilitator' && emailFieldId && targetRoundDates !== null) {
                 const facilitatorEmail = record.getCellValueAsString(emailFieldId);
                 if (facilitatorEmail) {
                   const blockedTimes = await getFacilitatorBlockedTimes({
                     base,
                     facilitatorEmail,
                     preset,
-                    targetRoundStart,
-                    targetRoundEnd,
+                    targetRoundStart: targetRoundDates.start,
+                    targetRoundEnd: targetRoundDates.end,
                   });
                   timeAvMins = subtractIntervals(timeAvMins, blockedTimes);
                 }

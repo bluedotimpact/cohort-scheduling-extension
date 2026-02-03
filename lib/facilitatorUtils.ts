@@ -107,11 +107,38 @@ export function getEmailFieldId(cohortsTable: Table | null, preset: Preset): str
 }
 
 /** Fetches 'Rounds' table via iteration field's linked table */
-export function getRoundsTable(base: Base, cohortsTable: Table | null, preset: Preset) {
+function getRoundsTable(base: Base, cohortsTable: Table | null, preset: Preset) {
   if (!cohortsTable) return null;
   if (!preset.cohortsIterationField) return null;
 
   const iterationField = cohortsTable.fields.find((f) => f.id === preset.cohortsIterationField);
   const roundsTableId = iterationField?.options?.linkedTableId as string | undefined;
   return roundsTableId ? base.getTableByIdIfExists(roundsTableId) : null;
+}
+
+/** Gets the 'Start date' and 'Last discussion date' for a round */
+export async function getTargetRoundDates(
+  base: Base,
+  targetRoundId: string | null,
+  cohortsTable: Table | null,
+  preset: Preset,
+) {
+  if (!targetRoundId) return null;
+
+  const roundsTable = getRoundsTable(base, cohortsTable, preset);
+  if (!roundsTable) return null;
+
+  const roundsData = await roundsTable.selectRecordsAsync({
+    fields: ['Start date', 'Last discussion date'],
+  });
+
+  const record = roundsData.records.find((r) => r.id === targetRoundId);
+  roundsData.unloadData();
+
+  if (!record) return null;
+
+  return {
+    start: new Date(record.getCellValueAsString('Start date')),
+    end: new Date(record.getCellValueAsString('Last discussion date')),
+  };
 }
