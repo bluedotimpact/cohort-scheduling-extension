@@ -11,16 +11,16 @@ import {
   useGlobalConfig
 } from "@airtable/blocks/ui";
 import React, { useCallback, useEffect, useState } from "react";
-import { Cohort, PersonType as SchedulerPersonType, SchedulerInput, solve } from "../lib/scheduler";
-import { wait, subtractIntervals } from "../lib/util";
-import { PersonBlob } from "./components/Blobs";
-import { CollapsibleSection } from "./components/CollapsibleSection";
-import { Preset } from "./index";
-import { ViewCohort } from "./view";
 import { parseIntervals, toDate } from "weekly-availabilities";
 import { MINUTES_IN_UNIT } from "../lib/constants";
 import { expectInteger } from "../lib/expectInteger";
 import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
+import { Cohort, SchedulerInput, PersonType as SchedulerPersonType, solve } from "../lib/scheduler";
+import { subtractIntervals, wait } from "../lib/util";
+import { PersonBlob } from "./components/Blobs";
+import { CollapsibleSection } from "./components/CollapsibleSection";
+import { Preset } from "./index";
+import { ViewCohort } from "./view";
 
 interface SolutionProps {
   solution: Cohort[],
