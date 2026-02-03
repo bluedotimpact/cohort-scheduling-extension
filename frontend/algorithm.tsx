@@ -326,14 +326,14 @@ const AlgorithmPage = () => {
               let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
 
               // For facilitators, subtract blocked times from other active rounds
-              if (isFacilitator && emailFieldId && targetRoundDates !== null) {
+              if (isFacilitator && emailFieldId) {
                 const facilitatorEmail = record.getCellValueAsString(emailFieldId);
                 if (facilitatorEmail) {
                   const blockedTimes = await getFacilitatorBlockedTimes({
                     base,
                     facilitatorEmail,
                     preset,
-                    targetRoundDates,
+                    ...(targetRoundDates && { targetRoundDates }),
                   });
                   timeAvMins = subtractIntervals(timeAvMins, blockedTimes);
                 }
