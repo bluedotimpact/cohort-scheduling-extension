@@ -280,6 +280,7 @@ const AlgorithmPage = () => {
           const source = personType.sourceView
             ? table?.getViewByIdIfExists(personType.sourceView)
             : table;
+          const isFacilitator = personType.name === 'Facilitator';
 
           if (!table || !source) {
             throw new Error(`Failed to get source for personType ${personType.name}`)
@@ -302,7 +303,7 @@ const AlgorithmPage = () => {
             personType.timeAvField,
             typeof personType.howManyCohortsPerType === "string" && personType.howManyCohortsPerType,
             // For facilitators, also fetch email field and iteration field
-            ...(personType.name === 'Facilitator' ? [emailFieldId, personType.iterationField] : []),
+            ...(isFacilitator ? [emailFieldId, personType.iterationField] : []),
           ];
 
           const peopleRecords = (await source.selectRecordsAsync({
@@ -310,7 +311,7 @@ const AlgorithmPage = () => {
           })).records
 
           // Get target round from Facilitator's information
-          if (personType.name === 'Facilitator' && personType.iterationField && peopleRecords.length > 0 && !targetRoundDates && cohortsTable) {
+          if (isFacilitator && personType.iterationField && peopleRecords.length > 0 && !targetRoundDates && cohortsTable) {
             const firstPersonRound = peopleRecords[0]?.getCellValue(personType.iterationField) as Array<{ id: string }> | null;
             const targetRoundId = firstPersonRound?.[0]?.id;
 
@@ -325,7 +326,7 @@ const AlgorithmPage = () => {
               let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
 
               // For facilitators, subtract blocked times from other active rounds
-              if (personType.name === 'Facilitator' && emailFieldId && targetRoundDates !== null) {
+              if (isFacilitator && emailFieldId && targetRoundDates !== null) {
                 const facilitatorEmail = record.getCellValueAsString(emailFieldId);
                 if (facilitatorEmail) {
                   const blockedTimes = await getFacilitatorBlockedTimes({
