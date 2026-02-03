@@ -14,9 +14,8 @@ import {
 import React, { useEffect, useState } from "react";
 import { calculateScheduleOverlap, format, fromDate, Interval, parseIntervals } from "weekly-availabilities";
 import { Preset } from ".";
-import { getEmailFieldId } from "../lib/facilitatorUtils";
+import { getEmailFieldId, getFacilitatorBlockedTimes } from "../lib/facilitatorUtils";
 import { Cohort } from "../lib/scheduler";
-import { getFacilitatorBlockedTimes } from "../lib/util";
 import { CohortBlob, PersonBlob } from "./components/Blobs";
 import { TimeAvWidget, TimeAvWidgetProps } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
