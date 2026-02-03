@@ -7,21 +7,19 @@ import { ROUND_END_DATE_FIELD_NAME, ROUND_START_DATE_FIELD_NAME } from './consta
 /** Facilitators can facilitate multiple rounds simultaneously. We want to avoid scheduling a facilitator at a time they
  * are already unavailable. This matches by email since facilitators have different record IDs across rounds.
  *
- * If targetRoundStart/End are provided, only blocks times for rounds that overlap with that date range.
+ * If targetRoundDates are provided, only blocks times for rounds that overlap with that date range.
  * Otherwise (for view display), blocks times for all active rounds.
  */
 export async function getFacilitatorBlockedTimes({
   base,
   facilitatorEmail,
   preset,
-  targetRoundStart,
-  targetRoundEnd,
+  targetRoundDates,
 }: {
   base: Base;
   facilitatorEmail: string;
   preset: Preset;
-  targetRoundStart?: Date;
-  targetRoundEnd?: Date;
+  targetRoundDates?: { start: Date; end: Date };
 }): Promise<Interval[]> {
   if (!facilitatorEmail || !preset.facilitatorEmailLookupField) {
     return [];
@@ -78,9 +76,8 @@ export async function getFacilitatorBlockedTimes({
 
     // If target round dates provided, check for overlap
     if (
-      targetRoundStart &&
-      targetRoundEnd &&
-      !dateRangesOverlap(round.startDate, round.endDate, targetRoundStart, targetRoundEnd)
+      targetRoundDates &&
+      !dateRangesOverlap(round.startDate, round.endDate, targetRoundDates.start, targetRoundDates.end)
     ) {
       continue;
     }

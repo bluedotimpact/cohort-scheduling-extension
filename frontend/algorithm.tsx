@@ -332,8 +332,7 @@ const AlgorithmPage = () => {
                     base,
                     facilitatorEmail,
                     preset,
-                    targetRoundStart: targetRoundDates.start,
-                    targetRoundEnd: targetRoundDates.end,
+                    targetRoundDates,
                   });
                   timeAvMins = subtractIntervals(timeAvMins, blockedTimes);
                 }
