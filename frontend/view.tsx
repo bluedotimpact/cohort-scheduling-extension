@@ -381,11 +381,32 @@ const ViewCohortWrapper = ({ recordId }: { recordId: string }) => {
     people,
   };
 
-  const facilitatorEmail = preset.facilitatorEmailLookupField
-    ? cohortRecord.getCellValueAsString(preset.facilitatorEmailLookupField)
-    : undefined;
+  const [facilitatorBlockedTimes, setFacilitatorBlockedTimes] = useState<Interval[]>([]);
 
-  return <ViewCohort cohort={cohort} facilitatorEmail={facilitatorEmail} />;
+  useEffect(() => {
+    const fetchBlockedTimes = async () => {
+      const facilitatorEmail = preset.facilitatorEmailLookupField
+        ? cohortRecord.getCellValueAsString(preset.facilitatorEmailLookupField)
+        : undefined;
+
+      if (!facilitatorEmail) {
+        setFacilitatorBlockedTimes([]);
+        return;
+      }
+
+      const times = await getFacilitatorBlockedTimes({
+        base,
+        facilitatorEmail,
+        preset,
+      });
+
+      setFacilitatorBlockedTimes(times);
+    };
+
+    fetchBlockedTimes();
+  }, [base, cohortRecord, preset]);
+
+  return <ViewCohort cohort={cohort} facilitatorBlockedTimes={facilitatorBlockedTimes} />;
 };
 
 const ViewPage = () => {
