@@ -196,7 +196,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
   }
 };
 
-export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort; facilitatorBlockedTimes?: Interval[] }) => {
+export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort; facilitatorBlockedTimes: Interval[] | undefined }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
