@@ -196,7 +196,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
   }
 };
 
-export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facilitatorEmail?: string | undefined }) => {
+export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort; facilitatorBlockedTimes?: Interval[] }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
@@ -205,7 +205,6 @@ export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facil
   const base = useBase();
 
   const [hoveredPerson, setHoveredPerson] = useState<null | (AirtableRecord & { timeAv: Interval[] })>(null);
-  const [facilitatorBlockedTimes, setFacilitatorBlockedTimes] = useState<Interval[]>([]);
 
   useEffect(() => {
     setHoveredPerson(null);
@@ -233,25 +232,6 @@ export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facil
     });
     return [...acc, ...people];
   }, []);
-
-  useEffect(() => {
-    if (!facilitatorEmail) {
-      setFacilitatorBlockedTimes([]);
-      return;
-    }
-
-    const fetchBlockedTimes = async () => {
-      const times = await getFacilitatorBlockedTimes({
-        base,
-        facilitatorEmail,
-        preset,
-      });
-
-      setFacilitatorBlockedTimes(times);
-    }
-
-    fetchBlockedTimes();
-  }, [facilitatorEmail, base, preset]);
 
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
@@ -311,7 +291,7 @@ export const ViewCohort = ({ cohort, facilitatorEmail }: { cohort: Cohort; facil
       opacity: parseInt(count) / allPeople.length,
     }))),
     [{
-      intervals: facilitatorBlockedTimes,
+      intervals: facilitatorBlockedTimes ?? [],
       class: "bg-red-500",
       opacity: 0.9,
     }],
