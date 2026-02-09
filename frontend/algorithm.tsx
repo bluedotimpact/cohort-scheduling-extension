@@ -11,15 +11,16 @@ import {
   useGlobalConfig
 } from "@airtable/blocks/ui";
 import React, { useCallback, useEffect, useState } from "react";
-import { Cohort, PersonType as SchedulerPersonType, SchedulerInput, solve } from "../lib/scheduler";
-import { wait } from "../lib/util";
+import { parseIntervals, toDate } from "weekly-availabilities";
+import { MINUTES_IN_UNIT } from "../lib/constants";
+import { expectInteger } from "../lib/expectInteger";
+import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
+import { Cohort, SchedulerInput, PersonType as SchedulerPersonType, solve } from "../lib/scheduler";
+import { subtractIntervals, wait } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
 import { ViewCohort } from "./view";
-import { parseIntervals, toDate } from "weekly-availabilities";
-import { MINUTES_IN_UNIT } from "../lib/constants";
-import { expectInteger } from "../lib/expectInteger";
 
 interface SolutionProps {
   solution: Cohort[],
@@ -266,6 +267,10 @@ const AlgorithmPage = () => {
   useEffect(() => {
     const generateGrandInput = async () => {
       try {
+        let targetRoundDates: { start: Date; end: Date } | null = null;
+        const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!);
+        const emailFieldId = getEmailFieldId(cohortsTable!, preset);
+
         const personTypes: SchedulerPersonType[] = [];
 
         for (const personType of Object.values(preset.personTypes)) {
@@ -275,6 +280,7 @@ const AlgorithmPage = () => {
           const source = personType.sourceView
             ? table?.getViewByIdIfExists(personType.sourceView)
             : table;
+          const isFacilitator = personType.name === 'Facilitator';
 
           if (!table || !source) {
             throw new Error(`Failed to get source for personType ${personType.name}`)
@@ -292,42 +298,74 @@ const AlgorithmPage = () => {
             throw new Error(`Missing timeAvField for personType ${personType.name}`)
           }
 
+          const fieldsToFetch = [
+            table.primaryField.id,
+            personType.timeAvField,
+            typeof personType.howManyCohortsPerType === "string" && personType.howManyCohortsPerType,
+            // For facilitators, also fetch email field and iteration field
+            ...(isFacilitator ? [emailFieldId, personType.iterationField] : []),
+          ];
+
           const peopleRecords = (await source.selectRecordsAsync({
-            fields: [
-              table.primaryField.id,
-              personType.timeAvField,
-              typeof personType.howManyCohortsPerType === "string" && personType.howManyCohortsPerType,
-            ],
+            fields: fieldsToFetch.filter(Boolean) as string[],
           })).records
+
+          // Get target round from Facilitator's information
+          if (isFacilitator && personType.iterationField && peopleRecords.length > 0 && !targetRoundDates && cohortsTable) {
+            const firstPersonRound = peopleRecords[0]?.getCellValue(personType.iterationField) as Array<{ id: string }> | null;
+            const targetRoundId = firstPersonRound?.[0]?.id;
+
+            if (targetRoundId) {
+              targetRoundDates = await getTargetRoundDates(base, targetRoundId, cohortsTable, preset);
+            }
+          }
+
+          // Process people, applying blocked time subtraction for facilitators
+          const people = await Promise.all(peopleRecords.map(async (record) => {
+            try {
+              let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
+
+              // For facilitators, subtract blocked times from other active rounds
+              if (isFacilitator && emailFieldId) {
+                const facilitatorEmail = record.getCellValueAsString(emailFieldId);
+                if (facilitatorEmail) {
+                  const blockedTimes = await getFacilitatorBlockedTimes({
+                    base,
+                    facilitatorEmail,
+                    preset,
+                    ...(targetRoundDates && { targetRoundDates }),
+                  });
+                  timeAvMins = subtractIntervals(timeAvMins, blockedTimes);
+                }
+              }
+
+              return {
+                id: record.id,
+                name: record.getCellValueAsString(table.primaryField.id),
+                timeAvMins,
+                timeAvUnits: timeAvMins.map(([s, e]) => [
+                  expectInteger(s / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 15 minute blocks'),
+                  expectInteger(e / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 15 minute blocks')
+                ] as [number, number]),
+                howManyCohorts:
+                typeof personType.howManyCohortsPerType === "string"
+                  ? record.getCellValue(personType.howManyCohortsPerType) as number
+                  : personType.howManyCohortsPerType!,
+              }
+            } catch (throwable: unknown) {
+              const prefix = `In processing person "${record.name}" (${record.id}): `;
+              const error: Error = throwable instanceof Error ? throwable : new Error(String(throwable))
+              error.message = prefix + error.message;
+              (error as { record?: unknown }).record = record;
+              throw error;
+            }
+          }));
 
           personTypes.push({
             name: personType.name,
             min: personType.howManyTypePerCohort[0],
             max: personType.howManyTypePerCohort[1],
-            people: peopleRecords.map((record) => {
-              try {
-                const timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
-                return {
-                  id: record.id,
-                  name: record.getCellValueAsString(table.primaryField.id),
-                  timeAvMins,
-                  timeAvUnits: timeAvMins.map(([s, e]) => [
-                    expectInteger(s / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 15 minute blocks'),
-                    expectInteger(e / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 15 minute blocks')
-                  ]),
-                  howManyCohorts:
-                  typeof personType.howManyCohortsPerType === "string"
-                    ? record.getCellValue(personType.howManyCohortsPerType) as number
-                    : personType.howManyCohortsPerType!,
-                }
-              } catch (throwable: unknown) {
-                const prefix = `In processing person "${record.name}" (${record.id}): `;
-                const error: Error = throwable instanceof Error ? throwable : new Error(String(throwable))
-                error.message = prefix + error.message;
-                (error as { record?: unknown }).record = record;
-                throw error;
-              }
-            }),
+            people,
           });
         }
         setGrandInput({
@@ -341,7 +379,7 @@ const AlgorithmPage = () => {
     };
 
     generateGrandInput();
-  }, [base, preset.lengthOfMeeting, preset.personTypes]);
+  }, [base, preset]);
 
   const [solution, setSolution] = useState<null | Cohort[]>(null);
   const [error, setError] = useState<null | unknown>(null);

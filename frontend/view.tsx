@@ -12,13 +12,13 @@ import {
   useWatchable
 } from "@airtable/blocks/ui";
 import React, { useEffect, useState } from "react";
+import { calculateScheduleOverlap, format, fromDate, Interval, parseIntervals } from "weekly-availabilities";
 import { Preset } from ".";
+import { getEmailFieldId, getFacilitatorBlockedTimes } from "../lib/facilitatorUtils";
 import { Cohort } from "../lib/scheduler";
 import { CohortBlob, PersonBlob } from "./components/Blobs";
 import { TimeAvWidget, TimeAvWidgetProps } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
-import { format, fromDate, parseIntervals, Interval, calculateScheduleOverlap } from "weekly-availabilities";
-import { getFacilitatorBlockedTimes } from "../lib/util";
 
 const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, recordId }) => {
   const globalConfig = useGlobalConfig();
@@ -40,11 +40,7 @@ const ViewPerson: React.FC<{ tableId: string, recordId: string }> = ({ tableId, 
 
   const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!)!;
 
-  // Get email field ID from the lookup field's options
-  const facilitatorEmailLookupField = preset.facilitatorEmailLookupField
-    ? cohortsTable.fields.find((f) => f.id === preset.facilitatorEmailLookupField)
-    : null;
-  const emailFieldId = facilitatorEmailLookupField?.options?.fieldIdInLinkedTable as string | undefined;
+  const emailFieldId = getEmailFieldId(cohortsTable, preset);
 
   const rawCohorts = useRecords(cohortsTable, {
     fields: [
