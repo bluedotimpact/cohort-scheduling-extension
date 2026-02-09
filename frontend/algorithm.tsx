@@ -11,7 +11,7 @@ import {
   useGlobalConfig
 } from "@airtable/blocks/ui";
 import React, { useCallback, useEffect, useState } from "react";
-import { parseIntervals, toDate } from "weekly-availabilities";
+import { Interval, parseIntervals, toDate } from "weekly-availabilities";
 import { MINUTES_IN_UNIT } from "../lib/constants";
 import { expectInteger } from "../lib/expectInteger";
 import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
@@ -324,12 +324,13 @@ const AlgorithmPage = () => {
           const people = await Promise.all(peopleRecords.map(async (record) => {
             try {
               let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
+              let blockedTimes: Interval[] | undefined;
 
               // For facilitators, subtract blocked times from other active rounds
               if (isFacilitator && emailFieldId) {
                 const facilitatorEmail = record.getCellValueAsString(emailFieldId);
                 if (facilitatorEmail) {
-                  const blockedTimes = await getFacilitatorBlockedTimes({
+                  blockedTimes = await getFacilitatorBlockedTimes({
                     base,
                     facilitatorEmail,
                     preset,
@@ -351,7 +352,8 @@ const AlgorithmPage = () => {
                 typeof personType.howManyCohortsPerType === "string"
                   ? record.getCellValue(personType.howManyCohortsPerType) as number
                   : personType.howManyCohortsPerType!,
-              }
+                blockedTimes,
+              };
             } catch (throwable: unknown) {
               const prefix = `In processing person "${record.name}" (${record.id}): `;
               const error: Error = throwable instanceof Error ? throwable : new Error(String(throwable))
