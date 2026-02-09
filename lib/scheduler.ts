@@ -20,7 +20,7 @@ export interface Person {
   timeAvMins: Interval[],
   timeAvUnits: [number, number][],
   howManyCohorts: number,
-  blockedTimes?: Interval[],
+  blockedTimes: Interval[] | undefined,
 }
 
 export interface Cohort {
