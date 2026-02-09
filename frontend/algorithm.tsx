@@ -159,27 +159,38 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
           </Button>
         </div>
       </div>
-      {viewedCohortIndex !== undefined && (
-        <Dialog
-          onClose={() => {
-            setViewedCohortIndex(undefined);
-          }}
-        >
-          <div className="flex justify-between">
-            <div className="flex space-x-2 items-center">
-              <div className="flex">
-                <Button icon="chevronUp" onClick={goToPreviousCohort} />
-                <Button icon="chevronDown" onClick={goToNextCohort} />
+      {viewedCohortIndex !== undefined && (() => {
+        const viewedCohort = solution[viewedCohortIndex]!;
+        const facilitatorId = viewedCohort.people['Facilitator']?.[0];
+        const facilitatorPersonType = personTypes.find(pt => pt.name === 'Facilitator');
+        const facilitator = facilitatorId ? facilitatorPersonType?.people.find(p => p.id === facilitatorId) : undefined;
+        const viewedCohortBlockedTimes = facilitator?.blockedTimes;
+
+        return (
+          <Dialog
+            onClose={() => {
+              setViewedCohortIndex(undefined);
+            }}
+          >
+            <div className="flex justify-between">
+              <div className="flex space-x-2 items-center">
+                <div className="flex">
+                  <Button icon="chevronUp" onClick={goToPreviousCohort} />
+                  <Button icon="chevronDown" onClick={goToNextCohort} />
+                </div>
+                <div className="text-gray-400 text-xs">
+                  {viewedCohortIndex + 1} / {solution.length}
+                </div>
               </div>
-              <div className="text-gray-400 text-xs">
-                {viewedCohortIndex + 1} / {solution.length}
-              </div>
+              <Dialog.CloseButton />
             </div>
-            <Dialog.CloseButton />
-          </div>
-          <ViewCohort cohort={solution[viewedCohortIndex]!} />
-        </Dialog>
-      )}
+            <ViewCohort
+              cohort={viewedCohort}
+              facilitatorBlockedTimes={viewedCohortBlockedTimes}
+            />
+          </Dialog>
+        );
+      })()}
       {isAcceptDialogOpen && (
         <Dialog
           onClose={() => {
