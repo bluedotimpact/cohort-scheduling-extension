@@ -1,8 +1,8 @@
 import type { Base, Table } from '@airtable/blocks/models';
-import { Interval, fromDate } from 'weekly-availabilities';
+import { fromDate, Interval } from 'weekly-availabilities';
 import type { Preset } from '../frontend';
-import { dateRangesOverlap } from './util';
 import { ROUND_END_DATE_FIELD_NAME, ROUND_START_DATE_FIELD_NAME } from './constants';
+import { dateRangesOverlap } from './util';
 
 /** Facilitators can facilitate multiple rounds simultaneously. We want to avoid scheduling a facilitator at a time they
  * are already unavailable. This matches by email since facilitators have different record IDs across rounds.
@@ -53,8 +53,8 @@ export async function getFacilitatorBlockedTimes({
   for (const r of roundRecords.records) {
     const isActive = r.getCellValueAsString('Status') === 'Active';
     if (!isActive) continue;
-    const startDate = new Date(r.getCellValueAsString(ROUND_START_DATE_FIELD_NAME));
-    const endDate = new Date(r.getCellValueAsString(ROUND_END_DATE_FIELD_NAME));
+    const startDate = new Date(r.getCellValue(ROUND_START_DATE_FIELD_NAME) as string);
+    const endDate = new Date(r.getCellValue(ROUND_END_DATE_FIELD_NAME) as string);
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) continue;
     roundInfo.set(r.id, { startDate, endDate });
   }
@@ -83,8 +83,8 @@ export async function getFacilitatorBlockedTimes({
       continue;
     }
 
-    const startDate = new Date(group.getCellValueAsString(preset.cohortsTableStartDateField!));
-    const endDate = new Date(group.getCellValueAsString(preset.cohortsTableEndDateField!));
+    const startDate = new Date(group.getCellValue(preset.cohortsTableStartDateField!) as string);
+    const endDate = new Date(group.getCellValue(preset.cohortsTableEndDateField!) as string);
 
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
       continue;
@@ -136,8 +136,8 @@ export async function getTargetRoundDates(
 
   if (!record) return null;
 
-  const start = new Date(record.getCellValueAsString(ROUND_START_DATE_FIELD_NAME));
-  const end = new Date(record.getCellValueAsString(ROUND_END_DATE_FIELD_NAME));
+  const start = new Date(record.getCellValue(ROUND_START_DATE_FIELD_NAME) as string);
+  const end = new Date(record.getCellValue(ROUND_END_DATE_FIELD_NAME) as string);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
 
   return { start, end };
