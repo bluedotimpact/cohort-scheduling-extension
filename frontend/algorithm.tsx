@@ -11,7 +11,7 @@ import {
   useGlobalConfig
 } from "@airtable/blocks/ui";
 import React, { useCallback, useEffect, useState } from "react";
-import { parseIntervals, toDate } from "weekly-availabilities";
+import { Interval, parseIntervals, toDate } from "weekly-availabilities";
 import { MINUTES_IN_UNIT } from "../lib/constants";
 import { expectInteger } from "../lib/expectInteger";
 import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
@@ -159,27 +159,38 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
           </Button>
         </div>
       </div>
-      {viewedCohortIndex !== undefined && (
-        <Dialog
-          onClose={() => {
-            setViewedCohortIndex(undefined);
-          }}
-        >
-          <div className="flex justify-between">
-            <div className="flex space-x-2 items-center">
-              <div className="flex">
-                <Button icon="chevronUp" onClick={goToPreviousCohort} />
-                <Button icon="chevronDown" onClick={goToNextCohort} />
+      {viewedCohortIndex !== undefined && (() => {
+        const viewedCohort = solution[viewedCohortIndex]!;
+        const facilitatorId = viewedCohort.people['Facilitator']?.[0];
+        const facilitatorPersonType = personTypes.find(pt => pt.name === 'Facilitator');
+        const facilitator = facilitatorId ? facilitatorPersonType?.people.find(p => p.id === facilitatorId) : undefined;
+        const viewedCohortBlockedTimes = facilitator?.blockedTimes;
+
+        return (
+          <Dialog
+            onClose={() => {
+              setViewedCohortIndex(undefined);
+            }}
+          >
+            <div className="flex justify-between">
+              <div className="flex space-x-2 items-center">
+                <div className="flex">
+                  <Button icon="chevronUp" onClick={goToPreviousCohort} />
+                  <Button icon="chevronDown" onClick={goToNextCohort} />
+                </div>
+                <div className="text-gray-400 text-xs">
+                  {viewedCohortIndex + 1} / {solution.length}
+                </div>
               </div>
-              <div className="text-gray-400 text-xs">
-                {viewedCohortIndex + 1} / {solution.length}
-              </div>
+              <Dialog.CloseButton />
             </div>
-            <Dialog.CloseButton />
-          </div>
-          <ViewCohort cohort={solution[viewedCohortIndex]!} />
-        </Dialog>
-      )}
+            <ViewCohort
+              cohort={viewedCohort}
+              facilitatorBlockedTimes={viewedCohortBlockedTimes}
+            />
+          </Dialog>
+        );
+      })()}
       {isAcceptDialogOpen && (
         <Dialog
           onClose={() => {
@@ -324,12 +335,13 @@ const AlgorithmPage = () => {
           const people = await Promise.all(peopleRecords.map(async (record) => {
             try {
               let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
+              let blockedTimes: Interval[] | undefined;
 
               // For facilitators, subtract blocked times from other active rounds
               if (isFacilitator && emailFieldId) {
                 const facilitatorEmail = record.getCellValueAsString(emailFieldId);
                 if (facilitatorEmail) {
-                  const blockedTimes = await getFacilitatorBlockedTimes({
+                  blockedTimes = await getFacilitatorBlockedTimes({
                     base,
                     facilitatorEmail,
                     preset,
@@ -351,7 +363,8 @@ const AlgorithmPage = () => {
                 typeof personType.howManyCohortsPerType === "string"
                   ? record.getCellValue(personType.howManyCohortsPerType) as number
                   : personType.howManyCohortsPerType!,
-              }
+                blockedTimes,
+              };
             } catch (throwable: unknown) {
               const prefix = `In processing person "${record.name}" (${record.id}): `;
               const error: Error = throwable instanceof Error ? throwable : new Error(String(throwable))
