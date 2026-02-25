@@ -280,6 +280,8 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
     class: "bg-purple-500",
   }
   const [showAgreedTime, setShowAgreedTime] = useState(true);
+  const [showFacilitatorBlockedTimes, setShowFacilitatorBlockedTimes] = useState(true);
+
   const availabilities: TimeAvWidgetProps["availabilities"] = [
     (hoveredPerson ? [{
       intervals: hoveredPerson.timeAv,
@@ -290,11 +292,11 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
       class: "bg-green-500",
       opacity: parseInt(count) / allPeople.length,
     }))),
-    [{
+    (showFacilitatorBlockedTimes ? [{
       intervals: facilitatorBlockedTimes ?? [],
       class: "bg-red-500",
       opacity: 0.9,
-    }],
+    }] : []),
     (showAgreedTime ? [agreedTime] : []),
   ].flat(1)
 
@@ -353,6 +355,12 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
             label={"Show agreed time"}
             width="auto"
           />
+        <Switch
+          value={showFacilitatorBlockedTimes}
+          onChange={(value) => setShowFacilitatorBlockedTimes(value)}
+          label={"Show facilitator blocked times"}
+          width="auto"
+        />
       </div>
     </>
   );
