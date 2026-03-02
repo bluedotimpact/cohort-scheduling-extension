@@ -12,11 +12,9 @@ import {
 } from "@airtable/blocks/ui";
 import React, { useCallback, useEffect, useState } from "react";
 import { Interval, parseIntervals, subtractIntervals, toDate } from "weekly-availabilities";
-import { MINUTES_IN_UNIT } from "../lib/constants";
-import { expectInteger } from "../lib/expectInteger";
 import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
 import { Cohort, SchedulerInput, PersonType as SchedulerPersonType, solve } from "../lib/scheduler";
-import { wait } from "../lib/util";
+import { toTimeAvUnits, wait } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
@@ -355,10 +353,7 @@ const AlgorithmPage = () => {
                 id: record.id,
                 name: record.getCellValueAsString(table.primaryField.id),
                 timeAvMins,
-                timeAvUnits: timeAvMins.map(([s, e]) => [
-                  expectInteger(s / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 15 minute blocks'),
-                  expectInteger(e / MINUTES_IN_UNIT, 'Expected time availability to be aligned to 15 minute blocks')
-                ] as [number, number]),
+                timeAvUnits: toTimeAvUnits(timeAvMins),
                 howManyCohorts:
                 typeof personType.howManyCohortsPerType === "string"
                   ? record.getCellValue(personType.howManyCohortsPerType) as number
