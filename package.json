@@ -15,7 +15,7 @@
         "glpk.js": "^4.0.2",
         "react": "^16.14.0",
         "react-dom": "^16.14.0",
-        "weekly-availabilities": "^1.0.0"
+        "weekly-availabilities": "^2.0.0"
     },
     "devDependencies": {
         "@airtable/blocks-cli": "^2.0.4",
