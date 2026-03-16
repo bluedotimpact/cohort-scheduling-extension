@@ -29,7 +29,7 @@ export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
   const unitsPerHour = 60 / MINUTES_IN_UNIT;
   const unitIndexes = zeroUntilN(7 * 24 * unitsPerHour);
 
-  const cellHeight = 1.5;
+  const cellHeight = 6 / unitsPerHour;
   const leftColumnWidth = 12;
   const unitsPerLabel = unitsPerHour / 2;
 
