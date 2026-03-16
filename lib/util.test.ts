@@ -14,6 +14,11 @@ function unit(hour: number, minute = 0): number {
 }
 
 describe('toTimeAvUnits (availability rounding to 30-min boundaries)', () => {
+  test('aligned availability is preserved exactly', () => {
+    const result = toTimeAvUnits([[mon(9, 0), mon(12, 0)]]);
+    expect(result).toEqual([[unit(9, 0), unit(12, 0)]]);
+  });
+
   test('availability with 15-min offset rounds inward (Nepal UTC+05:45 case)', () => {
     // Someone available 12:15 - 15:15 UTC (Nepal local 18:00 - 21:00)
     const result = toTimeAvUnits([[mon(12, 15), mon(15, 15)]]);
