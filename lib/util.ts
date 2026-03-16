@@ -1,4 +1,4 @@
-import { Interval } from "weekly-availabilities";
+import type { Interval } from "weekly-availabilities";
 import { MINUTES_IN_UNIT } from "./constants";
 
 export async function wait(ms: number) {
