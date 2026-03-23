@@ -645,30 +645,7 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     // (they are not in assignedIds so will be picked up)
   }
 
-  // ── Phase 4: Optimally fill remaining people using second LP with rank-distance scoring ──
-  const unassignedPeople: { person: Person; personType: PersonType }[] = [];
-  for (const pt of personTypes) {
-    for (const p of pt.people) {
-      if (!assignedIds.has(p.id)) {
-        unassignedPeople.push({ person: p, personType: pt });
-      }
-    }
-  }
-
-  if (unassignedPeople.length === 0) {
-    return allCohorts;
-  }
-
-  // Pre-compute expanded availability for all unassigned people
-  const expandedAvByPerson = new Map<string, [number, number][]>();
-  for (const { person } of unassignedPeople) {
-    const expanded = expandAvailability(person.timeAvMins);
-    expandedAvByPerson.set(person.id, toTimeAvUnits(expanded));
-  }
-
-  // Build Phase 4 LP
-  const phase4Binaries: string[] = [];
-  const phase4ObjVars: { name: string; coef: number }[] = [];
+  // ── Phase 4: Two-pass assignment LP with rank-distance scoring ──
 
   // Rank-distance weight tables
   const fullOverlapWeights = [20000, 15000, 10000];
@@ -678,212 +655,300 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   const getRankWeight = (weights: number[], rankDistance: number) =>
     weights[Math.min(rankDistance, weights.length - 1)]!;
 
-  for (const { person, personType } of unassignedPeople) {
+  const MAX_GREY_PER_COHORT = 3;
+
+  /** Run a single Phase 4 LP pass for a subset of unassigned people.
+   *  `blockedCohortIndices` prevents assignment to specific cohorts (coef = 0). */
+  async function runPhase4Pass(
+    passName: string,
+    people: { person: Person; personType: PersonType }[],
+    blockedCohortIndices: Set<number>,
+    enforceNewGroupMins: boolean,
+  ): Promise<void> {
+    if (people.length === 0) return;
+
+    // Pre-compute expanded availability
+    const expandedAvByPerson = new Map<string, [number, number][]>();
+    for (const { person } of people) {
+      const expanded = expandAvailability(person.timeAvMins);
+      expandedAvByPerson.set(person.id, toTimeAvUnits(expanded));
+    }
+
+    const binaries: string[] = [];
+    const objVars: { name: string; coef: number }[] = [];
+
+    for (const { person, personType } of people) {
+      for (let ci = 0; ci < allCohorts.length; ci++) {
+        const cohort = allCohorts[ci]!;
+        const currentCount = (cohort.people[personType.name] ?? []).length;
+        if (currentCount >= personType.max) continue;
+
+        const varName = `${passName}-${person.id}-${ci}`;
+        binaries.push(varName);
+
+        // Blocked cohort → coef 0
+        if (blockedCohortIndices.has(ci)) {
+          objVars.push({ name: varName, coef: 0 });
+          continue;
+        }
+
+        // Compute fit score with rank-distance awareness
+        const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
+        const overlapOriginal = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
+        const expandedUnits = expandedAvByPerson.get(person.id) ?? person.timeAvUnits;
+        const overlapExpanded = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
+
+        const majorityRank = cohort.majorityRank ?? 0;
+        const personRank = person.rank ?? 999;
+        const rankDistance = Math.abs(personRank - majorityRank);
+
+        let coef = 0;
+        if (overlapOriginal >= lengthOfMeetingInUnits) {
+          coef = getRankWeight(fullOverlapWeights, rankDistance);
+        } else if (overlapOriginal >= 1) {
+          coef = getRankWeight(partialOverlapWeights, rankDistance);
+        } else if (overlapExpanded >= 1) {
+          coef = getRankWeight(expandedOverlapWeights, rankDistance);
+        } else if (person.tier === 3) {
+          coef = 1;
+        }
+
+        objVars.push({ name: varName, coef });
+      }
+    }
+
+    if (binaries.length === 0) return;
+
+    const binarySet = new Set(binaries);
+    const constraints: LP["subjectTo"] = [];
+
+    // Each person assigned to at most 1 group
+    for (const { person } of people) {
+      const personVars: { name: string; coef: number }[] = [];
+      for (let ci = 0; ci < allCohorts.length; ci++) {
+        const varName = `${passName}-${person.id}-${ci}`;
+        if (binarySet.has(varName)) {
+          personVars.push({ name: varName, coef: 1 });
+        }
+      }
+      if (personVars.length > 0) {
+        constraints.push({
+          name: `${passName}-person-${person.id}-max1`,
+          vars: personVars,
+          bnds: { type: glpk.GLP_UP, ub: 1, lb: 0 },
+        });
+      }
+    }
+
+    // Each group respects max per type
     for (let ci = 0; ci < allCohorts.length; ci++) {
       const cohort = allCohorts[ci]!;
-      const currentCount = (cohort.people[personType.name] ?? []).length;
-      if (currentCount >= personType.max) continue;
+      for (const pt of personTypes) {
+        const currentCount = (cohort.people[pt.name] ?? []).length;
+        const room = pt.max - currentCount;
+        if (room <= 0) continue;
 
-      const varName = `assign-${person.id}-${ci}`;
-      phase4Binaries.push(varName);
+        const cohortTypeVars: { name: string; coef: number }[] = [];
+        for (const { person, personType } of people) {
+          if (personType.name !== pt.name) continue;
+          const varName = `${passName}-${person.id}-${ci}`;
+          if (binarySet.has(varName)) {
+            cohortTypeVars.push({ name: varName, coef: 1 });
+          }
+        }
 
-      // Compute fit score with rank-distance awareness
-      const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
-      const overlapOriginal = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
-      const expandedUnits = expandedAvByPerson.get(person.id) ?? person.timeAvUnits;
-      const overlapExpanded = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
-
-      const majorityRank = cohort.majorityRank ?? 0;
-      const personRank = person.rank ?? 999; // missing rank = highest distance
-      const rankDistance = Math.abs(personRank - majorityRank);
-
-      let coef = 0;
-      if (overlapOriginal >= lengthOfMeetingInUnits) {
-        coef = getRankWeight(fullOverlapWeights, rankDistance);
-      } else if (overlapOriginal >= 1) {
-        coef = getRankWeight(partialOverlapWeights, rankDistance);
-      } else if (overlapExpanded >= 1) {
-        coef = getRankWeight(expandedOverlapWeights, rankDistance);
-      } else if (person.tier === 3) {
-        coef = 1;
+        if (cohortTypeVars.length > 0) {
+          constraints.push({
+            name: `${passName}-cohort-${ci}-${pt.name}-max`,
+            vars: cohortTypeVars,
+            bnds: { type: glpk.GLP_UP, ub: room, lb: 0 },
+          });
+        }
       }
-
-      phase4ObjVars.push({ name: varName, coef });
     }
-  }
 
-  if (phase4Binaries.length === 0) {
-    return allCohorts;
-  }
+    // New groups (from Phase 3) must meet min per type — only on first pass
+    if (enforceNewGroupMins) {
+      for (let ci = 0; ci < allCohorts.length; ci++) {
+        const cohort = allCohorts[ci]!;
+        const totalPeople = Object.values(cohort.people).reduce((sum, arr) => sum + arr.length, 0);
+        if (totalPeople > 0) continue;
 
-  const phase4BinarySet = new Set(phase4Binaries);
-  const phase4Constraints: LP["subjectTo"] = [];
+        for (const pt of personTypes) {
+          const cohortTypeVars: { name: string; coef: number }[] = [];
+          for (const { person, personType } of people) {
+            if (personType.name !== pt.name) continue;
+            const varName = `${passName}-${person.id}-${ci}`;
+            if (binarySet.has(varName)) {
+              cohortTypeVars.push({ name: varName, coef: 1 });
+            }
+          }
 
-  // Each person assigned to at most 1 group
-  for (const { person } of unassignedPeople) {
-    const personVars: { name: string; coef: number }[] = [];
+          if (cohortTypeVars.length > 0) {
+            constraints.push({
+              name: `${passName}-cohort-${ci}-${pt.name}-min`,
+              vars: cohortTypeVars,
+              bnds: { type: glpk.GLP_LO, ub: pt.max, lb: pt.min },
+            });
+          }
+        }
+      }
+    }
+
+    // Grey cap: max grey per cohort
     for (let ci = 0; ci < allCohorts.length; ci++) {
-      const varName = `assign-${person.id}-${ci}`;
-      if (phase4BinarySet.has(varName)) {
-        personVars.push({ name: varName, coef: 1 });
-      }
-    }
-    if (personVars.length > 0) {
-      phase4Constraints.push({
-        name: `person-${person.id}-max1`,
-        vars: personVars,
-        bnds: { type: glpk.GLP_UP, ub: 1, lb: 0 },
-      });
-    }
-  }
+      const greyVars: { name: string; coef: number }[] = [];
+      for (const { person, personType } of people) {
+        if (personType.name === facilitatorType!.name) continue;
+        const timeUnit = allCohorts[ci]!.startTime / MINUTES_IN_UNIT;
+        const overlapOrig = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
+        const expandedUnits = expandedAvByPerson.get(person.id) ?? person.timeAvUnits;
+        const overlapExp = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
+        if (overlapOrig >= 1 || overlapExp >= 1) continue;
 
-  // Each group respects max per type
-  for (let ci = 0; ci < allCohorts.length; ci++) {
-    const cohort = allCohorts[ci]!;
-    for (const pt of personTypes) {
-      const currentCount = (cohort.people[pt.name] ?? []).length;
-      const room = pt.max - currentCount;
-      if (room <= 0) continue;
-
-      const cohortTypeVars: { name: string; coef: number }[] = [];
-      for (const { person, personType } of unassignedPeople) {
-        if (personType.name !== pt.name) continue;
-        const varName = `assign-${person.id}-${ci}`;
-        if (phase4BinarySet.has(varName)) {
-          cohortTypeVars.push({ name: varName, coef: 1 });
+        const varName = `${passName}-${person.id}-${ci}`;
+        if (binarySet.has(varName)) {
+          greyVars.push({ name: varName, coef: 1 });
         }
       }
-
-      if (cohortTypeVars.length > 0) {
-        phase4Constraints.push({
-          name: `cohort-${ci}-${pt.name}-max`,
-          vars: cohortTypeVars,
-          bnds: { type: glpk.GLP_UP, ub: room, lb: 0 },
+      if (greyVars.length > 0) {
+        // Account for existing grey members already in the cohort
+        const existingGrey = countExistingGrey(allCohorts[ci]!, personById, participantType!.name, lengthOfMeetingInUnits);
+        const remainingGreyRoom = Math.max(0, MAX_GREY_PER_COHORT - existingGrey);
+        constraints.push({
+          name: `${passName}-cohort-${ci}-grey-cap`,
+          vars: greyVars,
+          bnds: { type: glpk.GLP_UP, ub: remainingGreyRoom, lb: 0 },
         });
       }
     }
-  }
 
-  // New groups (from Phase 3) must meet min per type
-  // Identify Phase 3 cohorts: those with no people assigned yet
-  for (let ci = 0; ci < allCohorts.length; ci++) {
-    const cohort = allCohorts[ci]!;
-    const totalPeople = Object.values(cohort.people).reduce((sum, arr) => sum + arr.length, 0);
-    if (totalPeople > 0) continue; // Phase 1 cohort, skip
+    const pCount = personTypes.map(p => p.people.length).reduce((acc, cur) => acc + cur, 0);
+    const tmlim = Math.min(Math.max(pCount * 0.5, 5), 30);
 
-    for (const pt of personTypes) {
-      const cohortTypeVars: { name: string; coef: number }[] = [];
-      for (const { person, personType } of unassignedPeople) {
-        if (personType.name !== pt.name) continue;
-        const varName = `assign-${person.id}-${ci}`;
-        if (phase4BinarySet.has(varName)) {
-          cohortTypeVars.push({ name: varName, coef: 1 });
-        }
-      }
-
-      if (cohortTypeVars.length > 0) {
-        phase4Constraints.push({
-          name: `cohort-${ci}-${pt.name}-min`,
-          vars: cohortTypeVars,
-          bnds: { type: glpk.GLP_LO, ub: pt.max, lb: pt.min },
-        });
-      }
-    }
-  }
-
-  // Grey cap: max grey per cohort = participantMin - 1
-  for (let ci = 0; ci < allCohorts.length; ci++) {
-    const greyVars: { name: string; coef: number }[] = [];
-    for (const { person, personType } of unassignedPeople) {
-      if (personType.name === facilitatorType.name) continue;
-      const timeUnit = allCohorts[ci]!.startTime / MINUTES_IN_UNIT;
-      const overlapOrig = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
-      const expandedUnits = expandedAvByPerson.get(person.id) ?? person.timeAvUnits;
-      const overlapExp = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
-      if (overlapOrig >= 1 || overlapExp >= 1) continue; // not grey for this cohort
-
-      const varName = `assign-${person.id}-${ci}`;
-      if (phase4BinarySet.has(varName)) {
-        greyVars.push({ name: varName, coef: 1 });
-      }
-    }
-    if (greyVars.length > 0) {
-      phase4Constraints.push({
-        name: `cohort-${ci}-grey-cap`,
-        vars: greyVars,
-        bnds: { type: glpk.GLP_UP, ub: Math.max(0, participantType.min - 1), lb: 0 },
-      });
-    }
-  }
-
-  const personCount = personTypes.map(p => p.people.length).reduce((acc, cur) => acc + cur, 0);
-  const timeLimitSeconds = Math.min(Math.max(personCount * 0.5, 5), 30);
-
-  const phase4Options: Options = {
-    msglev: glpk.GLP_MSG_ALL,
-    presol: true,
-    tmlim: timeLimitSeconds,
-    cb: {
-      call: (progress) => {
-        console.log("phase4 progress", progress);
-      },
-      each: 1,
-    },
-  };
-
-  try {
-    const res = await glpk.solve(
-      {
-        name: "phase4",
-        objective: {
-          direction: glpk.GLP_MAX,
-          name: "phase4-obj",
-          vars: phase4ObjVars,
+    try {
+      const res = await glpk.solve(
+        {
+          name: passName,
+          objective: {
+            direction: glpk.GLP_MAX,
+            name: `${passName}-obj`,
+            vars: objVars,
+          },
+          subjectTo: constraints,
+          binaries,
         },
-        subjectTo: phase4Constraints,
-        binaries: phase4Binaries,
-      },
-      phase4Options,
-    );
+        {
+          msglev: glpk.GLP_MSG_ALL,
+          presol: true,
+          tmlim,
+          cb: { call: (progress) => console.log(`${passName} progress`, progress), each: 1 },
+        },
+      );
 
-    // Process Phase 4 results: add assigned people to cohorts
-    for (const varName of Object.keys(res.result.vars)) {
-      if (res.result.vars[varName] !== 1) continue;
+      // Process results: add assigned people to cohorts
+      const varPrefix = `${passName}-`;
+      for (const varName of Object.keys(res.result.vars)) {
+        if (res.result.vars[varName] !== 1) continue;
+        if (!varName.startsWith(varPrefix)) continue;
 
-      const match = varName.match(/^assign-(.+)-(\d+)$/);
-      if (!match) continue;
+        const match = varName.slice(varPrefix.length).match(/^(.+)-(\d+)$/);
+        if (!match) continue;
 
-      const personId = match[1]!;
-      const cohortIndex = parseInt(match[2]!);
-      const person = personById[personId];
-      const pt = personTypeByPersonId[personId];
-      if (!person || !pt || !allCohorts[cohortIndex]) continue;
+        const personId = match[1]!;
+        const cohortIndex = parseInt(match[2]!);
+        const person = personById[personId];
+        const pt = personTypeByPersonId[personId];
+        if (!person || !pt || !allCohorts[cohortIndex]) continue;
 
-      const cohort = allCohorts[cohortIndex]!;
-      if (!cohort.people[pt.name]) cohort.people[pt.name] = [];
-      cohort.people[pt.name]!.push(personId);
+        const cohort = allCohorts[cohortIndex]!;
+        if (!cohort.people[pt.name]) cohort.people[pt.name] = [];
+        cohort.people[pt.name]!.push(personId);
+        assignedIds.add(personId);
 
-      // Compute tier
-      if (!cohort.personTiers) cohort.personTiers = {};
+        // Compute tier
+        if (!cohort.personTiers) cohort.personTiers = {};
+        const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
+        const overlapOriginal = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
+
+        if (overlapOriginal >= lengthOfMeetingInUnits) {
+          cohort.personTiers[personId] = 1;
+        } else if (overlapOriginal >= 1) {
+          cohort.personTiers[personId] = 2;
+        } else {
+          cohort.personTiers[personId] = 3;
+        }
+      }
+    } catch (e) {
+      console.log(`${passName} LP failed:`, e);
+    }
+  }
+
+  // Helper to count existing grey members in a cohort
+  function countExistingGrey(
+    cohort: Cohort,
+    pById: Record<string, Person>,
+    ptName: string,
+    meetingLengthUnits: number,
+  ): number {
+    let count = 0;
+    for (const pid of (cohort.people[ptName] ?? [])) {
+      const p = pById[pid];
+      if (!p) continue;
       const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
-      const overlapOriginal = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
+      const overlap = getOverlapUnits(p.timeAvUnits, timeUnit, meetingLengthUnits);
+      const expanded = expandAvailability(p.timeAvMins);
+      const expandedUnits = toTimeAvUnits(expanded);
+      const overlapExp = getOverlapUnits(expandedUnits, timeUnit, meetingLengthUnits);
+      if (overlap < 1 && overlapExp < 1) count++;
+    }
+    return count;
+  }
 
-      if (overlapOriginal >= lengthOfMeetingInUnits) {
-        cohort.personTiers[personId] = 1;
-      } else if (overlapOriginal >= 1) {
-        cohort.personTiers[personId] = 2;
-      } else {
-        cohort.personTiers[personId] = 3;
+  // Collect all unassigned people
+  const allUnassigned: { person: Person; personType: PersonType }[] = [];
+  for (const pt of personTypes) {
+    for (const p of pt.people) {
+      if (!assignedIds.has(p.id)) {
+        allUnassigned.push({ person: p, personType: pt });
       }
     }
+  }
 
-    // Recompute majorityRank for all cohorts after Phase 4 assignments
+  if (allUnassigned.length > 0) {
+    // Determine the last rank level (neutral) — rank with the highest value
+    const allRanks = allUnassigned.map(({ person }) => person.rank).filter((r): r is number => r !== undefined);
+    const lastRank = allRanks.length > 0 ? Math.max(...allRanks) : undefined;
+
+    // Phase 4a: Assign non-neutral people
+    const nonNeutralPeople = allUnassigned.filter(({ person }) => person.rank !== lastRank);
+    await runPhase4Pass("phase4a", nonNeutralPeople, new Set(), true);
+
+    // Recompute majority ranks after Phase 4a
     for (const cohort of allCohorts) {
       cohort.majorityRank = computeMajorityRank(cohort, personById, participantType.name);
     }
-  } catch (e) {
-    console.log("Phase 4 LP failed:", e);
-    // Return what we have from earlier phases
+
+    // Phase 4b: Assign neutral people, blocking cohorts that have any strong yes (rank 0) members
+    const neutralPeople = allUnassigned.filter(({ person }) => person.rank === lastRank && !assignedIds.has(person.id));
+    const blockedCohorts = new Set<number>();
+    for (let ci = 0; ci < allCohorts.length; ci++) {
+      const cohort = allCohorts[ci]!;
+      // Check if any participant in this cohort has rank 0 (strong yes)
+      const hasStrongYes = Object.values(cohort.people).flat().some(pid => {
+        const p = personById[pid];
+        return p && p.rank === 0;
+      });
+      if (hasStrongYes) {
+        blockedCohorts.add(ci);
+      }
+    }
+    await runPhase4Pass("phase4b", neutralPeople, blockedCohorts, false);
+
+    // Recompute majority ranks after Phase 4b
+    for (const cohort of allCohorts) {
+      cohort.majorityRank = computeMajorityRank(cohort, personById, participantType.name);
+    }
   }
 
   return allCohorts;

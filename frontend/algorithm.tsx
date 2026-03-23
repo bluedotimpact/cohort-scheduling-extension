@@ -357,7 +357,7 @@ const AlgorithmPage = () => {
                 : undefined;
               const hasAvailability = timeAvMins.length > 0;
               let finalTimeAvMins = timeAvMins;
-              if (!hasAvailability && timezone) {
+              if (!hasAvailability && timezone && !isFacilitator) {
                 try {
                   finalTimeAvMins = generateDefaultAvailability(timezone);
                 } catch {
