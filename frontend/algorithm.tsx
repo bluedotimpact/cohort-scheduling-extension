@@ -312,7 +312,8 @@ const AlgorithmPage = () => {
             table.primaryField.id,
             personType.timeAvField,
             typeof personType.howManyCohortsPerType === "string" && personType.howManyCohortsPerType,
-            personType.timezoneField,  // NEW
+            personType.timezoneField,
+            personType.humanOpinionField,
             // For facilitators, also fetch email field and iteration field
             ...(isFacilitator ? [emailFieldId, personType.iterationField] : []),
           ];
@@ -365,6 +366,21 @@ const AlgorithmPage = () => {
               }
               const tier: 1 | 3 = hasAvailability ? 1 : 3;
 
+              // Compute rank from human opinion field
+              let rank: number | undefined;
+              if (personType.humanOpinionField) {
+                const cellValue = record.getCellValue(personType.humanOpinionField) as { name: string } | null;
+                if (cellValue) {
+                  // Get the field's choice options to determine rank by position
+                  const field = table.getFieldByIdIfExists(personType.humanOpinionField);
+                  if (field && field.options && 'choices' in field.options) {
+                    const choices = (field.options as { choices: { name: string }[] }).choices;
+                    const choiceIndex = choices.findIndex(c => c.name === cellValue.name);
+                    rank = choiceIndex >= 0 ? choiceIndex : undefined;
+                  }
+                }
+              }
+
               return {
                 id: record.id,
                 name: record.getCellValueAsString(table.primaryField.id),
@@ -377,6 +393,7 @@ const AlgorithmPage = () => {
                 blockedTimes,
                 tier,
                 timezone: timezone || undefined,
+                rank,
               };
             } catch (throwable: unknown) {
               const prefix = `In processing person "${record.name}" (${record.id}): `;

@@ -24,6 +24,7 @@ export interface Person {
   blockedTimes: Interval[] | undefined,
   tier: 1 | 3,
   timezone?: string | undefined,
+  rank?: number | undefined,
 }
 
 export interface Cohort {
@@ -32,6 +33,7 @@ export interface Cohort {
   /** Map from person type name -> person id */
   people: { [personType: string]: string[] },
   personTiers?: Record<string, 1 | 2 | 3>,
+  majorityRank?: number | undefined,
 }
 
 const toBinary = (personType: PersonType, person: Person, t: number): string => JSON.stringify([personType.name, person.id, t.toString()]);
@@ -241,19 +243,24 @@ async function solvePhase1(
   }
 }
 
-/** Find the best time slot where the most unassigned people can meet, subject to per-type minimums. */
+/** Find the best time slot where the most unassigned people can meet, subject to per-type minimums.
+ *  When preferredRank is provided and two slots tie on totalEligible, prefer the one with more
+ *  eligible people whose rank matches preferredRank. */
 function findBestTimeSlot(
   unassignedByType: Record<string, Person[]>,
   overlapThresholdByType: Record<string, number>,
   meetingLengthUnits: number,
   allTimeSlots: number[],
   personTypes: PersonType[],
+  preferredRank?: number,
 ): number | null {
   let bestTime: number | null = null;
   let bestTotal = 0;
+  let bestSameRank = 0;
 
   for (const t of allTimeSlots) {
     let totalEligible = 0;
+    let sameRankCount = 0;
     let allMinsMet = true;
 
     for (const pt of personTypes) {
@@ -271,15 +278,55 @@ function findBestTimeSlot(
       }
 
       totalEligible += eligible.length;
+
+      if (preferredRank !== undefined) {
+        for (const p of eligible) {
+          if (p.rank === preferredRank) {
+            sameRankCount++;
+          }
+        }
+      }
     }
 
-    if (allMinsMet && totalEligible > bestTotal) {
+    if (!allMinsMet) continue;
+
+    if (
+      totalEligible > bestTotal ||
+      (totalEligible === bestTotal && sameRankCount > bestSameRank)
+    ) {
       bestTotal = totalEligible;
+      bestSameRank = sameRankCount;
       bestTime = t;
     }
   }
 
   return bestTime;
+}
+
+/** Compute the majority rank of a cohort's participants. */
+function computeMajorityRank(
+  cohort: Cohort,
+  personById: Record<string, Person>,
+  participantTypeName: string,
+): number | undefined {
+  const participants = cohort.people[participantTypeName] ?? [];
+  if (participants.length === 0) return undefined;
+  const rankCounts: Record<number, number> = {};
+  for (const pid of participants) {
+    const rank = personById[pid]?.rank;
+    if (rank !== undefined) {
+      rankCounts[rank] = (rankCounts[rank] ?? 0) + 1;
+    }
+  }
+  let bestRank: number | undefined;
+  let bestCount = 0;
+  for (const [rank, count] of Object.entries(rankCounts)) {
+    if (count > bestCount) {
+      bestCount = count;
+      bestRank = parseInt(rank);
+    }
+  }
+  return bestRank;
 }
 
 // See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
@@ -296,13 +343,7 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
 
   const glpk = await GLPK();
 
-  // ── Phase 1: Run existing LP ──
-  const phase1Cohorts = await solvePhase1({ lengthOfMeetingMins, personTypes }, glpk);
-  if (phase1Cohorts === null) {
-    return null;
-  }
-
-  // Build a lookup: personId -> Person and personId -> PersonType
+  // Build lookups
   const personById: Record<string, Person> = {};
   const personTypeByPersonId: Record<string, PersonType> = {};
   for (const pt of personTypes) {
@@ -312,196 +353,303 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     }
   }
 
-  // Set tier 1 for all Phase 1 assigned people
-  for (const cohort of phase1Cohorts) {
-    cohort.personTiers = {};
-    for (const ptName of Object.keys(cohort.people)) {
-      for (const personId of cohort.people[ptName]!) {
-        cohort.personTiers[personId] = 1;
-      }
-    }
-  }
-
-  // ── Phase 2: Check participant capacity ──
-  const assignedIds = new Set<string>();
-  for (const cohort of phase1Cohorts) {
-    for (const ptName of Object.keys(cohort.people)) {
-      for (const personId of cohort.people[ptName]!) {
-        assignedIds.add(personId);
-      }
-    }
-  }
-
-  // Find the participant type (non-facilitator) and facilitator type
   const participantType = personTypes.find(pt => pt.name !== 'Facilitator');
   const facilitatorType = personTypes.find(pt => pt.name === 'Facilitator');
 
   if (!participantType || !facilitatorType) {
+    // Without both types, fall back to a single Phase 1 run
+    const phase1Cohorts = await solvePhase1({ lengthOfMeetingMins, personTypes }, glpk);
     return phase1Cohorts;
   }
 
-  const unassignedParticipants = participantType.people.filter(p => !assignedIds.has(p.id));
-  const unassignedFacilitators = facilitatorType.people.filter(p => !assignedIds.has(p.id));
-
-  // Remaining capacity across existing cohorts
-  let remainingParticipantCapacity = 0;
-  for (const cohort of phase1Cohorts) {
-    const currentCount = (cohort.people[participantType.name] ?? []).length;
-    remainingParticipantCapacity += participantType.max - currentCount;
+  // ── Determine rank levels ──
+  const rankSet = new Set<number>();
+  for (const p of participantType.people) {
+    if (p.rank !== undefined) {
+      rankSet.add(p.rank);
+    }
   }
+  const sortedRanks: (number | undefined)[] = Array.from(rankSet).sort((a, b) => a - b);
+  // Append undefined as the last rank level for people without rank
+  sortedRanks.push(undefined);
 
-  // ── Phase 3: Create additional groups if needed ──
-  const deficit = unassignedParticipants.length - remainingParticipantCapacity;
-  const maxNewGroupsByParticipants = Math.ceil(deficit / participantType.max);
-  const maxNewGroupsByFacilitators = Math.floor(unassignedFacilitators.length / facilitatorType.min);
-  let newGroupsNeeded = Math.min(maxNewGroupsByParticipants, maxNewGroupsByFacilitators);
+  // If no distinct ranks exist (all undefined), we have a single cycle with everyone
+  // sortedRanks will just be [undefined]
 
-  const newCohorts: Cohort[] = [];
+  // Compute maxT across all people for time slots (used in Phase 3)
+  let maxT = 0;
+  for (const pt of personTypes)
+    for (const p of pt.people)
+      for (const interval of p.timeAvUnits)
+        for (const t of interval) if (t > maxT) maxT = t;
+  const allTimeSlots = Array.from({ length: maxT }, (_, i) => i);
 
-  if (newGroupsNeeded > 0 && unassignedParticipants.length >= participantType.min) {
-    // Compute maxT across all people for time slots
-    let maxT = 0;
-    for (const pt of personTypes)
-      for (const p of pt.people)
-        for (const interval of p.timeAvUnits)
-          for (const t of interval) if (t > maxT) maxT = t;
-    const allTimeSlots = Array.from({ length: maxT }, (_, i) => i);
+  const allCohorts: Cohort[] = [];
+  const assignedIds = new Set<string>();
 
-    // Track which people have been consumed by new cohorts in Phase 3
-    const phase3AssignedIds = new Set<string>();
+  // Track which facilitators are assigned
+  const assignedFacIds = new Set<string>();
 
-    const halfMeeting = Math.ceil(lengthOfMeetingInUnits * 0.5);
+  for (let i = 0; i < sortedRanks.length; i++) {
+    const rankLevel = sortedRanks[i];
+    const isLastCycle = i === sortedRanks.length - 1;
 
-    // Helper to get currently unassigned people (not assigned in Phase 1 or Phase 3)
-    const getUnassignedByType = (): Record<string, Person[]> => {
-      const result: Record<string, Person[]> = {};
-      for (const pt of personTypes) {
-        result[pt.name] = pt.people.filter(
-          p => !assignedIds.has(p.id) && !phase3AssignedIds.has(p.id)
-        );
-      }
-      return result;
-    };
+    // ── Build participant pool: this rank's people + carry-forwards ──
+    const participantPool = participantType.people.filter(p => {
+      if (assignedIds.has(p.id)) return false;
+      if (p.rank === rankLevel) return true;
+      // Carry-forwards: unassigned people from previous ranks
+      if (rankLevel === undefined) return true; // last cycle gets everyone
+      if (p.rank !== undefined && p.rank < rankLevel) return true; // carry-forward from earlier rank
+      return false;
+    });
 
-    // Helper to attempt creating groups with given thresholds and availability units
-    const tryCreateGroups = (
-      overlapThresholdByType: Record<string, number>,
-      availabilityOverride?: Record<string, Map<string, [number, number][]>>,
-    ): void => {
-      while (newCohorts.length < newGroupsNeeded) {
-        const unassignedByType = getUnassignedByType();
+    if (participantPool.length === 0) continue;
 
-        // If using expanded availability, temporarily swap timeAvUnits
-        if (availabilityOverride) {
-          for (const ptName of Object.keys(unassignedByType)) {
-            const overrideMap = availabilityOverride[ptName];
-            if (overrideMap) {
-              unassignedByType[ptName] = unassignedByType[ptName]!.map(p => {
-                const expanded = overrideMap.get(p.id);
-                if (expanded) {
-                  return { ...p, timeAvUnits: expanded };
-                }
-                return p;
-              });
+    // ── Facilitator cascading ──
+    const facilitatorGroups: Person[][] = getFacilitatorGroupsForCycle(
+      rankLevel,
+      isLastCycle,
+      sortedRanks,
+      facilitatorType.people,
+      assignedFacIds,
+    );
+
+    for (const facilitatorGroup of facilitatorGroups) {
+      // Check if there are unassigned participants left in the pool
+      const unassignedPool = participantPool.filter(p => !assignedIds.has(p.id));
+      if (unassignedPool.length === 0) break;
+
+      // Filter facilitator group to only unassigned facilitators
+      const availableFacs = facilitatorGroup.filter(f => !assignedFacIds.has(f.id));
+      if (availableFacs.length < facilitatorType.min) continue;
+
+      // ── Phase 1: Run LP with this pool + facilitator group ──
+      const phase1Input: SchedulerInput = {
+        lengthOfMeetingMins,
+        personTypes: [
+          { ...participantType, people: unassignedPool },
+          { ...facilitatorType, people: availableFacs },
+        ],
+      };
+      const cohorts = await solvePhase1(phase1Input, glpk);
+      if (cohorts === null || cohorts.length === 0) continue;
+
+      // Process results
+      for (const cohort of cohorts) {
+        cohort.personTiers = {};
+        for (const ptName of Object.keys(cohort.people)) {
+          for (const personId of cohort.people[ptName]!) {
+            cohort.personTiers[personId] = 1;
+            assignedIds.add(personId);
+            if (ptName === facilitatorType.name) {
+              assignedFacIds.add(personId);
             }
           }
         }
 
-        // Check we still have enough unassigned participants
-        if ((unassignedByType[participantType.name] ?? []).length < participantType.min) {
-          break;
-        }
+        // Compute majorityRank
+        cohort.majorityRank = computeMajorityRank(cohort, personById, participantType.name);
 
-        const bestTime = findBestTimeSlot(
-          unassignedByType,
-          overlapThresholdByType,
-          lengthOfMeetingInUnits,
-          allTimeSlots,
-          personTypes,
-        );
-
-        if (bestTime === null) break;
-
-        // Create empty cohort at this time
-        const people: Record<string, string[]> = {};
-        for (const pt of personTypes) {
-          people[pt.name] = [];
-        }
-
-        newCohorts.push({
-          startTime: bestTime * MINUTES_IN_UNIT as WeeklyTime,
-          endTime: (bestTime + lengthOfMeetingInUnits) * MINUTES_IN_UNIT as WeeklyTime,
-          people,
-          personTiers: {},
-        });
-
-        // Mark no one as assigned yet — Phase 4 LP will do the actual assignment
-        // But we need to "reserve" some facilitators so the cascading logic
-        // properly counts remaining resources. Reserve the best facilitators.
-        const unassignedFacs = unassignedByType[facilitatorType.name] ?? [];
-        const eligibleFacs = unassignedFacs.filter(f => {
-          const overlap = getOverlapUnits(f.timeAvUnits, bestTime, lengthOfMeetingInUnits);
-          return overlap >= overlapThresholdByType[facilitatorType.name]!;
-        });
-        // Reserve min facilitators for this group
-        for (let i = 0; i < Math.min(facilitatorType.min, eligibleFacs.length); i++) {
-          phase3AssignedIds.add(eligibleFacs[i]!.id);
-        }
-      }
-    };
-
-    // 3a: Tier-1 people with >=50% overlap, facilitators >=50%
-    tryCreateGroups({
-      [participantType.name]: halfMeeting,
-      [facilitatorType.name]: halfMeeting,
-    });
-
-    // 3b: Participants >=1 unit overlap, facilitators >=50%
-    tryCreateGroups({
-      [participantType.name]: 1,
-      [facilitatorType.name]: halfMeeting,
-    });
-
-    // 3c: Expand participant availability, try >=50% then >=1 unit
-    const expandedParticipantAvailability = new Map<string, [number, number][]>();
-    for (const p of participantType.people) {
-      if (!assignedIds.has(p.id) && !phase3AssignedIds.has(p.id)) {
-        const expanded = expandAvailability(p.timeAvMins);
-        expandedParticipantAvailability.set(p.id, toTimeAvUnits(expanded));
+        allCohorts.push(cohort);
       }
     }
 
-    const availabilityOverride: Record<string, Map<string, [number, number][]>> = {
-      [participantType.name]: expandedParticipantAvailability,
-    };
+    // ── Phase 2: Check capacity ──
+    const unassignedInPool = participantPool.filter(p => !assignedIds.has(p.id));
+    let remainingCapacity = 0;
+    for (const cohort of allCohorts) {
+      const currentCount = (cohort.people[participantType.name] ?? []).length;
+      remainingCapacity += participantType.max - currentCount;
+    }
+    const deficit = unassignedInPool.length - remainingCapacity;
 
-    tryCreateGroups(
-      {
-        [participantType.name]: halfMeeting,
-        [facilitatorType.name]: halfMeeting,
-      },
-      availabilityOverride,
-    );
+    // ── Phase 3: Create additional groups if needed ──
+    if (deficit > 0 && unassignedInPool.length >= participantType.min) {
+      const unassignedFacs = facilitatorType.people.filter(f => !assignedFacIds.has(f.id));
+      if (unassignedFacs.length >= facilitatorType.min) {
+        const maxNewGroupsByParticipants = Math.ceil(deficit / participantType.max);
+        const maxNewGroupsByFacilitators = Math.floor(unassignedFacs.length / facilitatorType.min);
+        const newGroupsNeeded = Math.min(maxNewGroupsByParticipants, maxNewGroupsByFacilitators);
 
-    tryCreateGroups(
-      {
-        [participantType.name]: 1,
-        [facilitatorType.name]: halfMeeting,
-      },
-      availabilityOverride,
-    );
+        if (newGroupsNeeded > 0) {
+          const newCohorts: Cohort[] = [];
+          const phase3AssignedFacIds = new Set<string>();
+
+          const halfMeeting = Math.ceil(lengthOfMeetingInUnits * 0.5);
+
+          // Helper to get currently unassigned people for Phase 3
+          const getUnassignedByType = (): Record<string, Person[]> => ({
+            [participantType.name]: unassignedInPool.filter(p => !assignedIds.has(p.id)),
+            [facilitatorType.name]: facilitatorType.people.filter(
+              f => !assignedFacIds.has(f.id) && !phase3AssignedFacIds.has(f.id)
+            ),
+          });
+
+          // Check if all eligible participants at a time slot are grey (no overlap)
+          const allEligibleAreGrey = (
+            unassignedByType: Record<string, Person[]>,
+            time: number,
+            overlapThresholdByType: Record<string, number>,
+          ): boolean => {
+            const participants = unassignedByType[participantType.name] ?? [];
+            const threshold = overlapThresholdByType[participantType.name] ?? 1;
+            const eligible = participants.filter(p => {
+              const overlap = getOverlapUnits(p.timeAvUnits, time, lengthOfMeetingInUnits);
+              return overlap >= threshold;
+            });
+            if (eligible.length === 0) return true;
+            // Check if every eligible participant has no original overlap at all
+            return eligible.every(p => {
+              const origOverlap = getOverlapUnits(p.timeAvUnits, time, lengthOfMeetingInUnits);
+              return origOverlap < 1;
+            });
+          };
+
+          // Helper to attempt creating groups with given thresholds
+          const tryCreateGroups = (
+            overlapThresholdByType: Record<string, number>,
+            availabilityOverride?: Record<string, Map<string, [number, number][]>>,
+          ): void => {
+            while (newCohorts.length < newGroupsNeeded) {
+              const unassignedByType = getUnassignedByType();
+
+              // If using expanded availability, temporarily swap timeAvUnits
+              if (availabilityOverride) {
+                for (const ptName of Object.keys(unassignedByType)) {
+                  const overrideMap = availabilityOverride[ptName];
+                  if (overrideMap) {
+                    unassignedByType[ptName] = unassignedByType[ptName]!.map(p => {
+                      const expanded = overrideMap.get(p.id);
+                      if (expanded) {
+                        return { ...p, timeAvUnits: expanded };
+                      }
+                      return p;
+                    });
+                  }
+                }
+              }
+
+              if ((unassignedByType[participantType.name] ?? []).length < participantType.min) {
+                break;
+              }
+
+              // Find best time slot, skipping grey-only slots
+              let bestTime: number | null = null;
+              const triedTimes = new Set<number>();
+              for (;;) {
+                const candidateTime = findBestTimeSlot(
+                  unassignedByType,
+                  overlapThresholdByType,
+                  lengthOfMeetingInUnits,
+                  allTimeSlots.filter(t => !triedTimes.has(t)),
+                  [
+                    { ...participantType, people: unassignedByType[participantType.name] ?? [] },
+                    { ...facilitatorType, people: unassignedByType[facilitatorType.name] ?? [] },
+                  ],
+                  rankLevel,
+                );
+                if (candidateTime === null) break;
+                triedTimes.add(candidateTime);
+
+                // Check grey-only prevention
+                if (!allEligibleAreGrey(unassignedByType, candidateTime, overlapThresholdByType)) {
+                  bestTime = candidateTime;
+                  break;
+                }
+                // Otherwise try next best time
+              }
+
+              if (bestTime === null) break;
+
+              const people: Record<string, string[]> = {};
+              for (const pt of personTypes) {
+                people[pt.name] = [];
+              }
+
+              newCohorts.push({
+                startTime: bestTime * MINUTES_IN_UNIT as WeeklyTime,
+                endTime: (bestTime + lengthOfMeetingInUnits) * MINUTES_IN_UNIT as WeeklyTime,
+                people,
+                personTiers: {},
+              });
+
+              // Reserve facilitators
+              const availFacs = unassignedByType[facilitatorType.name] ?? [];
+              const eligibleFacs = availFacs.filter(f => {
+                const overlap = getOverlapUnits(f.timeAvUnits, bestTime!, lengthOfMeetingInUnits);
+                return overlap >= overlapThresholdByType[facilitatorType.name]!;
+              });
+              for (let j = 0; j < Math.min(facilitatorType.min, eligibleFacs.length); j++) {
+                phase3AssignedFacIds.add(eligibleFacs[j]!.id);
+              }
+            }
+          };
+
+          if (isLastCycle) {
+            // Full cascade: >=50% -> >=1 unit -> expanded 50% -> expanded 1 unit
+            tryCreateGroups({
+              [participantType.name]: halfMeeting,
+              [facilitatorType.name]: halfMeeting,
+            });
+
+            tryCreateGroups({
+              [participantType.name]: 1,
+              [facilitatorType.name]: halfMeeting,
+            });
+
+            // Expanded availability
+            const expandedParticipantAvailability = new Map<string, [number, number][]>();
+            for (const p of unassignedInPool) {
+              if (!assignedIds.has(p.id)) {
+                const expanded = expandAvailability(p.timeAvMins);
+                expandedParticipantAvailability.set(p.id, toTimeAvUnits(expanded));
+              }
+            }
+            const availabilityOverride: Record<string, Map<string, [number, number][]>> = {
+              [participantType.name]: expandedParticipantAvailability,
+            };
+
+            tryCreateGroups(
+              {
+                [participantType.name]: halfMeeting,
+                [facilitatorType.name]: halfMeeting,
+              },
+              availabilityOverride,
+            );
+
+            tryCreateGroups(
+              {
+                [participantType.name]: 1,
+                [facilitatorType.name]: halfMeeting,
+              },
+              availabilityOverride,
+            );
+          } else {
+            // Non-last cycle: only >=50% overlap
+            tryCreateGroups({
+              [participantType.name]: halfMeeting,
+              [facilitatorType.name]: halfMeeting,
+            });
+          }
+
+          // Add new cohorts to allCohorts
+          for (const cohort of newCohorts) {
+            allCohorts.push(cohort);
+          }
+        }
+      }
+    }
+
+    // Carry forward: unassigned people remain in the pool for next cycle automatically
+    // (they are not in assignedIds so will be picked up)
   }
 
-  // Combine all cohorts
-  const allCohorts = [...phase1Cohorts, ...newCohorts];
-
-  // ── Phase 4: Optimally fill remaining people using second LP ──
-  // Recompute unassigned after Phase 3 created new empty cohorts
-  const phase4AssignedIds = new Set<string>(assignedIds);
+  // ── Phase 4: Optimally fill remaining people using second LP with rank-distance scoring ──
   const unassignedPeople: { person: Person; personType: PersonType }[] = [];
   for (const pt of personTypes) {
     for (const p of pt.people) {
-      if (!phase4AssignedIds.has(p.id)) {
+      if (!assignedIds.has(p.id)) {
         unassignedPeople.push({ person: p, personType: pt });
       }
     }
@@ -522,8 +670,13 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   const phase4Binaries: string[] = [];
   const phase4ObjVars: { name: string; coef: number }[] = [];
 
-  // Track which cohorts are new (from Phase 3) — they need min constraints
-  const phase1CohortCount = phase1Cohorts.length;
+  // Rank-distance weight tables
+  const fullOverlapWeights = [20000, 15000, 10000];
+  const partialOverlapWeights = [8000, 5000, 3000];
+  const expandedOverlapWeights = [800, 500, 100];
+
+  const getRankWeight = (weights: number[], rankDistance: number) =>
+    weights[Math.min(rankDistance, weights.length - 1)]!;
 
   for (const { person, personType } of unassignedPeople) {
     for (let ci = 0; ci < allCohorts.length; ci++) {
@@ -534,23 +687,26 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
       const varName = `assign-${person.id}-${ci}`;
       phase4Binaries.push(varName);
 
-      // Compute fit score
+      // Compute fit score with rank-distance awareness
       const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
       const overlapOriginal = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
       const expandedUnits = expandedAvByPerson.get(person.id) ?? person.timeAvUnits;
       const overlapExpanded = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
 
+      const majorityRank = cohort.majorityRank ?? 0;
+      const personRank = person.rank ?? 999; // missing rank = highest distance
+      const rankDistance = Math.abs(personRank - majorityRank);
+
       let coef = 0;
       if (overlapOriginal >= lengthOfMeetingInUnits) {
-        coef = 10000; // W1: full overlap
+        coef = getRankWeight(fullOverlapWeights, rankDistance);
       } else if (overlapOriginal >= 1) {
-        coef = 1000; // W2: partial overlap with original
+        coef = getRankWeight(partialOverlapWeights, rankDistance);
       } else if (overlapExpanded >= 1) {
-        coef = 100; // W3: overlap with expanded availability
+        coef = getRankWeight(expandedOverlapWeights, rankDistance);
       } else if (person.tier === 3) {
-        coef = 1; // W4: tier 3, group time in reasonable hours
+        coef = 1;
       }
-      // else coef stays 0
 
       phase4ObjVars.push({ name: varName, coef });
     }
@@ -560,10 +716,7 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     return allCohorts;
   }
 
-  // Use a fast lookup set for binary existence
   const phase4BinarySet = new Set(phase4Binaries);
-
-  // Constraints
   const phase4Constraints: LP["subjectTo"] = [];
 
   // Each person assigned to at most 1 group
@@ -612,7 +765,12 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   }
 
   // New groups (from Phase 3) must meet min per type
-  for (let ci = phase1CohortCount; ci < allCohorts.length; ci++) {
+  // Identify Phase 3 cohorts: those with no people assigned yet
+  for (let ci = 0; ci < allCohorts.length; ci++) {
+    const cohort = allCohorts[ci]!;
+    const totalPeople = Object.values(cohort.people).reduce((sum, arr) => sum + arr.length, 0);
+    if (totalPeople > 0) continue; // Phase 1 cohort, skip
+
     for (const pt of personTypes) {
       const cohortTypeVars: { name: string; coef: number }[] = [];
       for (const { person, personType } of unassignedPeople) {
@@ -630,6 +788,31 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
           bnds: { type: glpk.GLP_LO, ub: pt.max, lb: pt.min },
         });
       }
+    }
+  }
+
+  // Grey cap: max grey per cohort = participantMin - 1
+  for (let ci = 0; ci < allCohorts.length; ci++) {
+    const greyVars: { name: string; coef: number }[] = [];
+    for (const { person, personType } of unassignedPeople) {
+      if (personType.name === facilitatorType.name) continue;
+      const timeUnit = allCohorts[ci]!.startTime / MINUTES_IN_UNIT;
+      const overlapOrig = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
+      const expandedUnits = expandedAvByPerson.get(person.id) ?? person.timeAvUnits;
+      const overlapExp = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
+      if (overlapOrig >= 1 || overlapExp >= 1) continue; // not grey for this cohort
+
+      const varName = `assign-${person.id}-${ci}`;
+      if (phase4BinarySet.has(varName)) {
+        greyVars.push({ name: varName, coef: 1 });
+      }
+    }
+    if (greyVars.length > 0) {
+      phase4Constraints.push({
+        name: `cohort-${ci}-grey-cap`,
+        vars: greyVars,
+        bnds: { type: glpk.GLP_UP, ub: Math.max(0, participantType.min - 1), lb: 0 },
+      });
     }
   }
 
@@ -693,10 +876,87 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
         cohort.personTiers[personId] = 3;
       }
     }
+
+    // Recompute majorityRank for all cohorts after Phase 4 assignments
+    for (const cohort of allCohorts) {
+      cohort.majorityRank = computeMajorityRank(cohort, personById, participantType.name);
+    }
   } catch (e) {
     console.log("Phase 4 LP failed:", e);
-    // Return what we have from Phase 1 + empty Phase 3 cohorts
+    // Return what we have from earlier phases
   }
 
   return allCohorts;
+}
+
+/** Determine facilitator groups to try for a given rank cycle.
+ *  Returns arrays of facilitator pools to attempt in order. */
+function getFacilitatorGroupsForCycle(
+  rankLevel: number | undefined,
+  isLastCycle: boolean,
+  sortedRanks: (number | undefined)[],
+  allFacilitators: Person[],
+  assignedFacIds: Set<string>,
+): Person[][] {
+  const availableFacs = allFacilitators.filter(f => !assignedFacIds.has(f.id));
+
+  if (isLastCycle) {
+    // Last cycle: try all remaining facilitators at once
+    return [availableFacs];
+  }
+
+  if (rankLevel === undefined) {
+    // Should not reach here since undefined is always last, but handle gracefully
+    return [availableFacs];
+  }
+
+  const groups: Person[][] = [];
+
+  // Find the numeric ranks (exclude undefined)
+  const numericRanks = sortedRanks.filter((r): r is number => r !== undefined);
+
+  if (numericRanks.length > 0 && rankLevel === numericRanks[0]) {
+    // First rank (rank 0 cycle):
+    // Try with rank 0 facilitators
+    const rank0Facs = availableFacs.filter(f => f.rank === rankLevel);
+    if (rank0Facs.length > 0) groups.push(rank0Facs);
+
+    // Try with rank 1 facilitators (next rank only)
+    if (numericRanks.length > 1) {
+      const rank1Facs = availableFacs.filter(f => f.rank === numericRanks[1]);
+      if (rank1Facs.length > 0) groups.push(rank1Facs);
+    }
+  } else if (numericRanks.length > 1 && rankLevel === numericRanks[1]) {
+    // Second rank (rank 1 cycle):
+    // Try with remaining rank 0 facilitators (use up higher-ranked first)
+    const rank0Facs = availableFacs.filter(f => f.rank === numericRanks[0]);
+    if (rank0Facs.length > 0) groups.push(rank0Facs);
+
+    // Try with rank 1 facilitators
+    const rank1Facs = availableFacs.filter(f => f.rank === rankLevel);
+    if (rank1Facs.length > 0) groups.push(rank1Facs);
+
+    // Try with remaining facilitators (rank 2+)
+    const remainingFacs = availableFacs.filter(f =>
+      f.rank === undefined || (f.rank !== numericRanks[0] && f.rank !== rankLevel)
+    );
+    if (remainingFacs.length > 0) groups.push(remainingFacs);
+  } else {
+    // Other rank cycles:
+    // Try with same-rank facilitators first
+    const sameRankFacs = availableFacs.filter(f => f.rank === rankLevel);
+    if (sameRankFacs.length > 0) groups.push(sameRankFacs);
+
+    // Try with all remaining
+    const otherFacs = availableFacs.filter(f => f.rank !== rankLevel);
+    if (otherFacs.length > 0) groups.push(otherFacs);
+  }
+
+  // If no groups were built (e.g., no facilitators with matching ranks),
+  // fall back to all available facilitators
+  if (groups.length === 0 && availableFacs.length > 0) {
+    groups.push(availableFacs);
+  }
+
+  return groups;
 }

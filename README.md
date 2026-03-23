@@ -4,35 +4,38 @@ Airtable extension for flexibly finding overlapping cohorts from people's time a
 
 ## How it works
 
-The algorithm uses a multi-phase approach to assign as many people as possible to cohorts, using the constraint solver [GLPK](https://github.com/jvail/glpk.js/).
+The algorithm uses a multi-phase approach to assign as many people as possible to cohorts, using the constraint solver [GLPK](https://github.com/jvail/glpk.js/). It groups people by rank (human opinion), prioritises availability overlap, and ensures cohort viability.
+
+### Bucket-aware cycling
+
+If a **bucket field** is configured, the algorithm runs a full scheduling cycle per bucket — processing each bucket in order. This keeps people from the same bucket together where possible.
+
+Each cycle runs Phases 1–3 for that bucket's participants (plus unmatched carry-forwards from earlier cycles). Early cycles only try high-quality matches; the last cycle tries everything.
+
+If no bucket field is configured, a single cycle runs for everyone.
 
 ### Phase 1 — Perfect match
-Runs a Linear Programming (LP) solver to find cohorts where every assigned person has **full availability overlap** with the meeting time. This is the original algorithm and produces the highest-quality matches.
+Runs a Linear Programming (LP) solver to find cohorts where every assigned person has **full availability overlap** with the meeting time.
 
 ### Phase 2 — Check capacity
-Checks if there are enough spots across existing cohorts for all remaining unassigned participants. If not, more groups are needed.
+Checks if there are enough spots across existing cohorts for remaining unassigned participants. If not, more groups are needed.
 
-### Phase 3 — Create additional groups (cascading)
+### Phase 3 — Create additional groups
 Creates the minimum number of new groups needed, trying progressively more permissive strategies:
 
-- **3a:** Find times where the most unassigned people have **≥50% overlap**. Facilitators also need ≥50%.
-- **3b:** Relax participants to **≥1 unit (30 min) overlap**. Facilitators stay at ≥50%.
-- **3c:** **Expand participant availability** — take their submitted time-of-day windows and apply them to all 7 days of the week (e.g. "Monday 1–3pm" becomes "every day 1–3pm"). Facilitators are not expanded and still need ≥50% overlap.
+- **≥50% overlap** for both participants and facilitators
+- **≥1 unit (30 min) overlap** for participants, facilitators stay at ≥50%
+- **Expanded availability** — replicate submitted time-of-day windows across all 7 days (e.g. "Monday 1–3pm" becomes "every day 1–3pm")
 
-New groups are only created if there are enough unassigned people of each type to meet the minimum constraints (e.g. at least 1 facilitator and enough participants). The number of new groups is capped by both participant need and facilitator availability.
+Non-last rank cycles only try ≥50% overlap. The full cascade (including expanded availability) only runs on the last cycle. New groups are capped by both participant need and facilitator availability.
 
 ### Phase 4 — Optimally fill remaining people
-Runs a second LP to assign all remaining unassigned people (including those with no submitted availability) into groups. The solver optimises across everyone at once, using a weighted scoring system:
+Runs a second LP to assign all remaining unassigned people into groups, optimising across everyone at once. Scoring considers both **availability overlap** and **bucket proximity** (whether the person is in the same bucket as the cohort's majority). Same-bucket matches score higher than cross-bucket ones at the same overlap level.
 
-| Priority | Condition | Weight |
-|----------|-----------|--------|
-| 1st | Full overlap with meeting time | 10000 |
-| 2nd | Partial overlap with original availability | 1000 |
-| 3rd | Overlap with expanded availability | 100 |
-| 4th | No availability, but meeting is in timezone reasonable hours (9am–9pm) | 1 |
-
-### Tier 3 — People with no availability
-People who didn't submit availability but have a timezone configured get synthetic availability (9am–9pm Mon–Fri in their timezone). They are placed into groups during Phase 4 with the lowest priority, ensuring they don't displace people with actual availability data.
+### Safeguards
+- **Grey cap:** Each cohort can have at most `min - 1` people with no availability overlap, ensuring enough reliable members for the group to be viable.
+- **No grey-only groups:** Phase 3 will not create a group where all members lack availability overlap.
+- **Timezone fallback:** People without submitted availability but with a timezone get synthetic availability (9am–9pm Mon–Fri in their timezone) and are placed with lowest priority.
 
 ### Colour coding
 The solution view colour-codes each person by match quality:
