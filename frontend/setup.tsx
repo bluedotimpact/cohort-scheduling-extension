@@ -32,6 +32,7 @@ export type PersonType = {
   cohortOverlapPartialField?: string;
   iterationField?: string,
   timezoneField?: string;
+  humanOpinionField?: string;
   howManyTypePerCohort?: [number, number];
   howManyCohortsPerType?: number | string;
   cohortsTableField?: string;
@@ -213,6 +214,13 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
                       table={sourceTable}
                       allowedTypes={[FieldType.SINGLE_LINE_TEXT, FieldType.SINGLE_SELECT]}
                       globalConfigKey={[...path, "timezoneField"]}
+                    />
+                  </FormField>
+                  <FormField label="Human opinion field (optional)">
+                    <FieldPickerSynced
+                      table={sourceTable}
+                      allowedTypes={[FieldType.SINGLE_SELECT]}
+                      globalConfigKey={[...path, "humanOpinionField"]}
                     />
                   </FormField>
                 </div>
