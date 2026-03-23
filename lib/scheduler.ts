@@ -767,12 +767,31 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
       }
     }
 
-    // New groups (from Phase 3) must meet min per type — only on first pass
+    // New groups (from Phase 3) must meet min per type — only if enough people available
     if (enforceNewGroupMins) {
       for (let ci = 0; ci < allCohorts.length; ci++) {
         const cohort = allCohorts[ci]!;
         const totalPeople = Object.values(cohort.people).reduce((sum, arr) => sum + arr.length, 0);
         if (totalPeople > 0) continue;
+
+        // Check if there are enough people with positive scores to meet min for all types
+        let canMeetAllMins = true;
+        for (const pt of personTypes) {
+          const eligibleCount = people.filter(({ person, personType }) => {
+            if (personType.name !== pt.name) return false;
+            const varName = `${passName}-${person.id}-${ci}`;
+            if (!binarySet.has(varName)) return false;
+            // Check if the person has a positive score for this cohort
+            const obj = objVars.find(v => v.name === varName);
+            return obj && obj.coef > 0;
+          }).length;
+          if (eligibleCount < pt.min) {
+            canMeetAllMins = false;
+            break;
+          }
+        }
+
+        if (!canMeetAllMins) continue; // Skip min constraints — let LP fill what it can
 
         for (const pt of personTypes) {
           const cohortTypeVars: { name: string; coef: number }[] = [];
