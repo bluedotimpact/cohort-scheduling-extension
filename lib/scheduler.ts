@@ -1,7 +1,7 @@
 import GLPK, { LP, Options } from "glpk.js";
 import { Interval, WeeklyTime } from "weekly-availabilities";
 import { MINUTES_IN_UNIT } from "./constants";
-import { getOverlapUnits, getDistanceUnits, expandAvailability, toTimeAvUnits } from "./util";
+import { getOverlapUnits, expandAvailability, toTimeAvUnits } from "./util";
 
 export interface SchedulerInput {
   lengthOfMeetingMins: number,
