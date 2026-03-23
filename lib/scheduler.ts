@@ -399,7 +399,7 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   const neutralCyclePhase3Indices = new Set<number>();
 
   for (let i = 0; i < sortedRanks.length; i++) {
-    const rankLevel = sortedRanks[i];
+    const rankLevel = sortedRanks[i]!;
     const isLastCycle = i === sortedRanks.length - 1;
 
     // ── Build participant pool: this rank's people + carry-forwards ──
