@@ -376,6 +376,16 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   // If no distinct ranks exist (all undefined), we have a single cycle with everyone
   // sortedRanks will just be [undefined]
 
+  // Determine the neutral rank (highest numeric rank across ALL people)
+  // Used to prevent neutral/strong-yes mixing in Phase 1 carry-forwards
+  const globalRanks: number[] = [];
+  for (const pt of personTypes) {
+    for (const p of pt.people) {
+      if (p.rank !== undefined) globalRanks.push(p.rank);
+    }
+  }
+  const neutralRank = globalRanks.length > 0 ? Math.max(...globalRanks) : undefined;
+
   // Compute maxT across all people for time slots (used in Phase 3)
   let maxT = 0;
   for (const pt of personTypes)
@@ -395,12 +405,25 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     const isLastCycle = i === sortedRanks.length - 1;
 
     // ── Build participant pool: this rank's people + carry-forwards ──
+    // Neutral isolation: don't carry rank 0 (strong yes) people into neutral+ cycles.
+    // They'll be handled by Phase 4a instead, which respects neutral isolation.
+    const isNeutralOrLater = neutralRank !== undefined && (
+      rankLevel === undefined || rankLevel >= neutralRank
+    );
     const participantPool = participantType.people.filter(p => {
       if (assignedIds.has(p.id)) return false;
       if (p.rank === rankLevel) return true;
       // Carry-forwards: unassigned people from previous ranks
-      if (rankLevel === undefined) return true; // last cycle gets everyone
-      if (p.rank !== undefined && p.rank < rankLevel) return true; // carry-forward from earlier rank
+      if (rankLevel === undefined) {
+        // Last cycle: exclude rank 0 to prevent mixing with neutrals
+        if (p.rank === 0 && neutralRank !== undefined && neutralRank > 0) return false;
+        return true;
+      }
+      if (p.rank !== undefined && p.rank < rankLevel) {
+        // Don't carry rank 0 into neutral+ cycles
+        if (isNeutralOrLater && p.rank === 0) return false;
+        return true;
+      }
       return false;
     });
 
@@ -935,12 +958,8 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   }
 
   if (allUnassigned.length > 0) {
-    // Determine the last rank level (neutral) — rank with the highest value
-    const allRanks = allUnassigned.map(({ person }) => person.rank).filter((r): r is number => r !== undefined);
-    const lastRank = allRanks.length > 0 ? Math.max(...allRanks) : undefined;
-
-    // Phase 4a: Assign non-neutral people
-    const nonNeutralPeople = allUnassigned.filter(({ person }) => person.rank !== lastRank);
+    // Phase 4a: Assign non-neutral people (neutralRank computed earlier from ALL people)
+    const nonNeutralPeople = allUnassigned.filter(({ person }) => person.rank !== neutralRank);
     await runPhase4Pass("phase4a", nonNeutralPeople, new Set(), true);
 
     // Recompute majority ranks after Phase 4a
@@ -949,7 +968,7 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     }
 
     // Phase 4b: Assign neutral people, blocking cohorts that have any strong yes (rank 0) members
-    const neutralPeople = allUnassigned.filter(({ person }) => person.rank === lastRank && !assignedIds.has(person.id));
+    const neutralPeople = allUnassigned.filter(({ person }) => person.rank === neutralRank && !assignedIds.has(person.id));
     const blockedCohorts = new Set<number>();
     for (let ci = 0; ci < allCohorts.length; ci++) {
       const cohort = allCohorts[ci]!;
