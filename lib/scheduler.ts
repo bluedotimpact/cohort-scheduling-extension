@@ -709,13 +709,15 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
         if (currentCount >= personType.max) continue;
 
         const varName = `${passName}-${person.id}-${ci}`;
-        binaries.push(varName);
 
-        // Blocked cohort → coef 0 (global or per-person blocking)
+        // Blocked cohort → skip variable entirely (don't create it)
+        // Using coef=0 is insufficient because the LP solver can still set
+        // a zero-coefficient variable to 1 when it's indifferent.
         if (blockedCohortIndices.has(ci) || isPersonBlockedFromCohort?.(person, ci)) {
-          objVars.push({ name: varName, coef: 0 });
           continue;
         }
+
+        binaries.push(varName);
 
         // Compute fit score with rank-distance awareness
         const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
