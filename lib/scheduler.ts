@@ -369,12 +369,7 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
       rankSet.add(p.rank);
     }
   }
-  const sortedRanks: (number | undefined)[] = Array.from(rankSet).sort((a, b) => a - b);
-  // Append undefined as the last rank level for people without rank
-  sortedRanks.push(undefined);
-
-  // If no distinct ranks exist (all undefined), we have a single cycle with everyone
-  // sortedRanks will just be [undefined]
+  const sortedRanks: number[] = Array.from(rankSet).sort((a, b) => a - b);
 
   // Determine the neutral rank (highest numeric rank across ALL people)
   // Used to prevent neutral/strong-yes mixing in Phase 1 carry-forwards
@@ -410,18 +405,11 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     // ── Build participant pool: this rank's people + carry-forwards ──
     // Neutral isolation: don't carry rank 0 (strong yes) people into neutral+ cycles.
     // They'll be handled by Phase 4a instead, which respects neutral isolation.
-    const isNeutralOrLater = neutralRank !== undefined && (
-      rankLevel === undefined || rankLevel >= neutralRank
-    );
+    const isNeutralOrLater = neutralRank !== undefined && rankLevel >= neutralRank;
     const participantPool = participantType.people.filter(p => {
       if (assignedIds.has(p.id)) return false;
       if (p.rank === rankLevel) return true;
       // Carry-forwards: unassigned people from previous ranks
-      if (rankLevel === undefined) {
-        // Last cycle: exclude rank 0 to prevent mixing with neutrals
-        if (p.rank === 0 && neutralRank !== undefined && neutralRank > 0) return false;
-        return true;
-      }
       if (p.rank !== undefined && p.rank < rankLevel) {
         // Don't carry rank 0 into neutral+ cycles
         if (isNeutralOrLater && p.rank === 0) return false;
@@ -1035,9 +1023,9 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
 /** Determine facilitator groups to try for a given rank cycle.
  *  Returns arrays of facilitator pools to attempt in order. */
 function getFacilitatorGroupsForCycle(
-  rankLevel: number | undefined,
+  rankLevel: number,
   isLastCycle: boolean,
-  sortedRanks: (number | undefined)[],
+  sortedRanks: number[],
   allFacilitators: Person[],
   assignedFacIds: Set<string>,
 ): Person[][] {
@@ -1048,31 +1036,23 @@ function getFacilitatorGroupsForCycle(
     return [availableFacs];
   }
 
-  if (rankLevel === undefined) {
-    // Should not reach here since undefined is always last, but handle gracefully
-    return [availableFacs];
-  }
-
   const groups: Person[][] = [];
 
-  // Find the numeric ranks (exclude undefined)
-  const numericRanks = sortedRanks.filter((r): r is number => r !== undefined);
-
-  if (numericRanks.length > 0 && rankLevel === numericRanks[0]) {
+  if (sortedRanks.length > 0 && rankLevel === sortedRanks[0]) {
     // First rank (rank 0 cycle):
     // Try with rank 0 facilitators
     const rank0Facs = availableFacs.filter(f => f.rank === rankLevel);
     if (rank0Facs.length > 0) groups.push(rank0Facs);
 
     // Try with rank 1 facilitators (next rank only)
-    if (numericRanks.length > 1) {
-      const rank1Facs = availableFacs.filter(f => f.rank === numericRanks[1]);
+    if (sortedRanks.length > 1) {
+      const rank1Facs = availableFacs.filter(f => f.rank === sortedRanks[1]);
       if (rank1Facs.length > 0) groups.push(rank1Facs);
     }
-  } else if (numericRanks.length > 1 && rankLevel === numericRanks[1]) {
+  } else if (sortedRanks.length > 1 && rankLevel === sortedRanks[1]) {
     // Second rank (rank 1 cycle):
     // Try with remaining rank 0 facilitators (use up higher-ranked first)
-    const rank0Facs = availableFacs.filter(f => f.rank === numericRanks[0]);
+    const rank0Facs = availableFacs.filter(f => f.rank === sortedRanks[0]);
     if (rank0Facs.length > 0) groups.push(rank0Facs);
 
     // Try with rank 1 facilitators
