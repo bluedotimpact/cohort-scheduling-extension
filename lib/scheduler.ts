@@ -403,28 +403,8 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   // Track Phase 3 cohorts created during neutral+ cycles (rank 0 should not be assigned to these)
   const neutralCyclePhase3Indices = new Set<number>();
 
-  // Isolation check helper — call after every assignment point
-  const checkIsolation = (phase: string, cohortIndex?: number) => {
-    if (neutralRank === undefined || neutralRank === 0) return;
-    const indicesToCheck = cohortIndex !== undefined ? [cohortIndex] : allCohorts.map((_, i) => i);
-    for (const ci of indicesToCheck) {
-      const cohort = allCohorts[ci];
-      if (!cohort) continue;
-      const allIds = Object.entries(cohort.people).flatMap(([ptName, ids]) =>
-        ids.map(id => ({ id, typeName: ptName }))
-      );
-      const rank0Participants = allIds.filter(({ id, typeName }) => typeName === participantType.name && personById[id]?.rank === 0);
-      const neutralParticipants = allIds.filter(({ id, typeName }) => typeName === participantType.name && personById[id]?.rank === neutralRank);
-      if (rank0Participants.length > 0 && neutralParticipants.length > 0) {
-        console.error(
-          `[ISOLATION VIOLATION in ${phase}] Cohort ${ci} (${cohort.startTime}-${cohort.endTime}):\n` +
-          `  Rank 0: ${rank0Participants.map(({ id }) => personById[id]?.name ?? id).join(', ')}\n` +
-          `  Neutral: ${neutralParticipants.map(({ id }) => personById[id]?.name ?? id).join(', ')}\n` +
-          `  All: ${allIds.map(({ id, typeName }) => `${personById[id]?.name ?? id} (${typeName}, rank=${personById[id]?.rank})`).join(', ')}`
-        );
-      }
-    }
-  };
+  console.log(`[RANK] neutralRank=${neutralRank}, sortedRanks=${JSON.stringify(sortedRanks)}, participantType="${participantType.name}"`);
+  console.log(`[RANK] Participants: ${participantType.people.map(p => `${p.name}:${p.rank}`).join(', ')}`);
 
   for (let i = 0; i < sortedRanks.length; i++) {
     const rankLevel = sortedRanks[i];
@@ -501,7 +481,8 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
         cohort.majorityRank = computeMajorityRank(cohort, personById, participantType.name);
 
         allCohorts.push(cohort);
-        checkIsolation(`Phase 1 (rank ${rankLevel} cycle)`, allCohorts.length - 1);
+
+
       }
     }
 
@@ -1014,6 +995,9 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
       }
     }
     const nonNeutralPeople = allUnassigned.filter(({ person }) => person.rank !== neutralRank);
+    console.log(`[PHASE4a DEBUG] nonNeutralPeople: ${nonNeutralPeople.map(({ person }) => `${person.name}(rank=${person.rank})`).join(', ') || '(none)'}`);
+    console.log(`[PHASE4a DEBUG] cohortsWithNeutrals: ${JSON.stringify([...cohortsWithNeutrals])}`);
+    console.log(`[PHASE4a DEBUG] neutralCyclePhase3Indices: ${JSON.stringify([...neutralCyclePhase3Indices])}`);
     await runPhase4Pass("phase4a", nonNeutralPeople, new Set(), true,
       (person, ci) => person.rank === 0 && (
         cohortsWithNeutrals.has(ci) || neutralCyclePhase3Indices.has(ci)
@@ -1024,7 +1008,8 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     for (const cohort of allCohorts) {
       cohort.majorityRank = computeMajorityRank(cohort, personById, participantType.name);
     }
-    checkIsolation('Phase 4a');
+
+
 
     // Phase 4b: Assign neutral people, blocking cohorts that have any strong yes (rank 0) members
     const neutralPeople = allUnassigned.filter(({ person }) => person.rank === neutralRank && !assignedIds.has(person.id));
@@ -1040,13 +1025,36 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
         blockedCohorts.add(ci);
       }
     }
+    console.log(`[PHASE4b DEBUG] neutralPeople: ${neutralPeople.map(({ person }) => `${person.name}(rank=${person.rank})`).join(', ') || '(none)'}`);
+    console.log(`[PHASE4b DEBUG] blockedCohorts (has rank 0): ${JSON.stringify([...blockedCohorts])}`);
+    console.log(`[PHASE4b DEBUG] total cohorts: ${allCohorts.length}, blocked: ${blockedCohorts.size}, available: ${allCohorts.length - blockedCohorts.size}`);
     await runPhase4Pass("phase4b", neutralPeople, blockedCohorts, false);
 
     // Recompute majority ranks after Phase 4b
     for (const cohort of allCohorts) {
       cohort.majorityRank = computeMajorityRank(cohort, personById, participantType.name);
     }
-    checkIsolation('Phase 4b');
+
+
+  }
+
+  // Final isolation check
+  if (neutralRank !== undefined && neutralRank > 0) {
+    for (let ci = 0; ci < allCohorts.length; ci++) {
+      const cohort = allCohorts[ci]!;
+      const allIds = Object.entries(cohort.people).flatMap(([ptName, ids]) =>
+        ids.map(id => ({ id, typeName: ptName }))
+      );
+      const rank0Parts = allIds.filter(({ id, typeName }) => typeName === participantType.name && personById[id]?.rank === 0);
+      const neutralParts = allIds.filter(({ id, typeName }) => typeName === participantType.name && personById[id]?.rank === neutralRank);
+      if (rank0Parts.length > 0 && neutralParts.length > 0) {
+        console.error(
+          `[ISOLATION VIOLATION] Cohort ${ci}: ` +
+          `rank0=[${rank0Parts.map(({ id }) => personById[id]?.name).join(',')}] ` +
+          `neutral=[${neutralParts.map(({ id }) => personById[id]?.name).join(',')}]`
+        );
+      }
+    }
   }
 
   return allCohorts;
