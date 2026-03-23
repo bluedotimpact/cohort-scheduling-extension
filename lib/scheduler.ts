@@ -400,6 +400,9 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   // Track which facilitators are assigned
   const assignedFacIds = new Set<string>();
 
+  // Track Phase 3 cohorts created during neutral+ cycles (rank 0 should not be assigned to these)
+  const neutralCyclePhase3Indices = new Set<number>();
+
   for (let i = 0; i < sortedRanks.length; i++) {
     const rankLevel = sortedRanks[i];
     const isLastCycle = i === sortedRanks.length - 1;
@@ -482,6 +485,14 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     const unassignedInPool = participantPool.filter(p => !assignedIds.has(p.id));
     let remainingCapacity = 0;
     for (const cohort of allCohorts) {
+      // In neutral+ cycles, skip cohorts that have rank 0 members — neutrals can't use them
+      if (isNeutralOrLater) {
+        const hasRank0 = Object.values(cohort.people).flat().some(pid => {
+          const p = personById[pid];
+          return p && p.rank === 0;
+        });
+        if (hasRank0) continue;
+      }
       const currentCount = (cohort.people[participantType.name] ?? []).length;
       remainingCapacity += participantType.max - currentCount;
     }
@@ -658,6 +669,10 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
 
           // Add new cohorts to allCohorts
           for (const cohort of newCohorts) {
+            // Track neutral-cycle Phase 3 groups so Phase 4a won't assign rank 0 to them
+            if (isNeutralOrLater) {
+              neutralCyclePhase3Indices.add(allCohorts.length);
+            }
             allCohorts.push(cohort);
           }
         }
@@ -976,7 +991,9 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     }
     const nonNeutralPeople = allUnassigned.filter(({ person }) => person.rank !== neutralRank);
     await runPhase4Pass("phase4a", nonNeutralPeople, new Set(), true,
-      (person, ci) => person.rank === 0 && cohortsWithNeutrals.has(ci),
+      (person, ci) => person.rank === 0 && (
+        cohortsWithNeutrals.has(ci) || neutralCyclePhase3Indices.has(ci)
+      ),
     );
 
     // Recompute majority ranks after Phase 4a
