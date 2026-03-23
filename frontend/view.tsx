@@ -334,7 +334,7 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
                       (hoveredPerson === person ? "text-slate-500" : "")
                     }
                   >
-                    <PersonBlob key={personID} name={person.name} />
+                    <PersonBlob key={personID} name={person.name} tier={cohort.personTiers?.[personID]} />
                   </div>
                 );
               })}
