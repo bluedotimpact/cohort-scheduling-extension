@@ -811,7 +811,7 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
       phase4Constraints.push({
         name: `cohort-${ci}-grey-cap`,
         vars: greyVars,
-        bnds: { type: glpk.GLP_UP, ub: Math.max(0, participantType.min - 1), lb: 0 },
+        bnds: { type: glpk.GLP_UP, ub: 3, lb: 0 },
       });
     }
   }
