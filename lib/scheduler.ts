@@ -681,12 +681,14 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   const MAX_GREY_PER_COHORT = 3;
 
   /** Run a single Phase 4 LP pass for a subset of unassigned people.
-   *  `blockedCohortIndices` prevents assignment to specific cohorts (coef = 0). */
+   *  `blockedCohortIndices` prevents assignment to specific cohorts (coef = 0).
+   *  `isPersonBlockedFromCohort` optionally provides per-person blocking (e.g., rank 0 blocked from neutral cohorts). */
   async function runPhase4Pass(
     passName: string,
     people: { person: Person; personType: PersonType }[],
     blockedCohortIndices: Set<number>,
     enforceNewGroupMins: boolean,
+    isPersonBlockedFromCohort?: (person: Person, cohortIndex: number) => boolean,
   ): Promise<void> {
     if (people.length === 0) return;
 
@@ -709,8 +711,8 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
         const varName = `${passName}-${person.id}-${ci}`;
         binaries.push(varName);
 
-        // Blocked cohort → coef 0
-        if (blockedCohortIndices.has(ci)) {
+        // Blocked cohort → coef 0 (global or per-person blocking)
+        if (blockedCohortIndices.has(ci) || isPersonBlockedFromCohort?.(person, ci)) {
           objVars.push({ name: varName, coef: 0 });
           continue;
         }
@@ -959,8 +961,21 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
 
   if (allUnassigned.length > 0) {
     // Phase 4a: Assign non-neutral people (neutralRank computed earlier from ALL people)
+    // Rank 0 people are blocked from cohorts that contain any neutral members (bidirectional isolation)
+    const cohortsWithNeutrals = new Set<number>();
+    if (neutralRank !== undefined) {
+      for (let ci = 0; ci < allCohorts.length; ci++) {
+        const hasNeutral = Object.values(allCohorts[ci]!.people).flat().some(pid => {
+          const p = personById[pid];
+          return p && p.rank === neutralRank;
+        });
+        if (hasNeutral) cohortsWithNeutrals.add(ci);
+      }
+    }
     const nonNeutralPeople = allUnassigned.filter(({ person }) => person.rank !== neutralRank);
-    await runPhase4Pass("phase4a", nonNeutralPeople, new Set(), true);
+    await runPhase4Pass("phase4a", nonNeutralPeople, new Set(), true,
+      (person, ci) => person.rank === 0 && cohortsWithNeutrals.has(ci),
+    );
 
     // Recompute majority ranks after Phase 4a
     for (const cohort of allCohorts) {
@@ -1039,11 +1054,9 @@ function getFacilitatorGroupsForCycle(
     const rank1Facs = availableFacs.filter(f => f.rank === rankLevel);
     if (rank1Facs.length > 0) groups.push(rank1Facs);
 
-    // Try with remaining facilitators (rank 2+)
-    const remainingFacs = availableFacs.filter(f =>
-      f.rank === undefined || (f.rank !== numericRanks[0] && f.rank !== rankLevel)
-    );
-    if (remainingFacs.length > 0) groups.push(remainingFacs);
+    // Stop here — do not try rank 2+ (neutral) facilitators.
+    // This prevents neutral facilitators from being placed with rank 0 carry-forward participants.
+    // Neutral facilitators will be used in the neutral cycle or assigned via Phase 4b.
   } else {
     // Other rank cycles:
     // Try with same-rank facilitators first
