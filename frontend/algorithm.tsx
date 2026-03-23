@@ -371,13 +371,12 @@ const AlgorithmPage = () => {
               if (personType.humanOpinionField) {
                 const cellValue = record.getCellValue(personType.humanOpinionField) as { name: string } | null;
                 if (cellValue) {
-                  // Get the field's choice options to determine rank by position
-                  const field = table.getFieldByIdIfExists(personType.humanOpinionField);
-                  if (field && field.options && 'choices' in field.options) {
-                    const choices = (field.options as { choices: { name: string }[] }).choices;
-                    const choiceIndex = choices.findIndex(c => c.name === cellValue.name);
-                    rank = choiceIndex >= 0 ? choiceIndex : undefined;
-                  }
+                  const rankMap: Record<string, number> = {
+                    'Strong yes': 0,
+                    'Weak yes': 1,
+                    'Neutral': 2,
+                  };
+                  rank = rankMap[cellValue.name];
                 }
               }
 
