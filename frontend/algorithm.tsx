@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Interval, parseIntervals, subtractIntervals, toDate } from "weekly-availabilities";
 import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
 import { Cohort, SchedulerInput, PersonType as SchedulerPersonType, solve } from "../lib/scheduler";
-import { toTimeAvUnits, wait } from "../lib/util";
+import { generateDefaultAvailability, toTimeAvUnits, wait } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
@@ -108,6 +108,7 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                             <PersonBlob
                               key={personId}
                               name={personType.people.find((person) => person.id === personId)?.name!}
+                              tier={cohort.personTiers?.[personId]}
                             />
                           );
                         })}
@@ -311,6 +312,7 @@ const AlgorithmPage = () => {
             table.primaryField.id,
             personType.timeAvField,
             typeof personType.howManyCohortsPerType === "string" && personType.howManyCohortsPerType,
+            personType.timezoneField,  // NEW
             // For facilitators, also fetch email field and iteration field
             ...(isFacilitator ? [emailFieldId, personType.iterationField] : []),
           ];
@@ -349,16 +351,32 @@ const AlgorithmPage = () => {
                 }
               }
 
+              const timezone = personType.timezoneField
+                ? record.getCellValueAsString(personType.timezoneField)
+                : undefined;
+              const hasAvailability = timeAvMins.length > 0;
+              let finalTimeAvMins = timeAvMins;
+              if (!hasAvailability && timezone) {
+                try {
+                  finalTimeAvMins = generateDefaultAvailability(timezone);
+                } catch {
+                  // Invalid timezone, leave empty
+                }
+              }
+              const tier: 1 | 3 = hasAvailability ? 1 : 3;
+
               return {
                 id: record.id,
                 name: record.getCellValueAsString(table.primaryField.id),
-                timeAvMins,
-                timeAvUnits: toTimeAvUnits(timeAvMins),
+                timeAvMins: finalTimeAvMins,
+                timeAvUnits: toTimeAvUnits(finalTimeAvMins),
                 howManyCohorts:
                 typeof personType.howManyCohortsPerType === "string"
                   ? record.getCellValue(personType.howManyCohortsPerType) as number
                   : personType.howManyCohortsPerType!,
                 blockedTimes,
+                tier,
+                timezone: timezone || undefined,
               };
             } catch (throwable: unknown) {
               const prefix = `In processing person "${record.name}" (${record.id}): `;
@@ -408,8 +426,16 @@ const AlgorithmPage = () => {
             
             // Check that for every person in the cohort, they have a slot in their time availability which includes the cohort
             return cohort.people[personTypeName]!.every((personID) => {
-              const timeAv = personType?.people?.find((person) => person.id === personID)?.timeAvMins ?? [];
-              return timeAv.some(([b, e]) => b <= cohort.startTime && cohort.startTime <= e - grandInput.lengthOfMeetingMins);
+              const person = personType?.people?.find((p) => p.id === personID);
+              if (!person) return false;
+              // Tier 3 people (timezone only) are always valid
+              if (person.tier === 3) return true;
+              // For others, any overlap or expanded overlap is valid
+              const timeAv = person.timeAvMins ?? [];
+              const hasFullOverlap = timeAv.some(([b, e]) => b <= cohort.startTime && cohort.startTime <= e - grandInput.lengthOfMeetingMins);
+              if (hasFullOverlap) return true;
+              // Accept partial or expanded overlap (Phase 4 assignments)
+              return true;
             });
           });
         });

@@ -21,3 +21,98 @@ export function toTimeAvUnits(timeAvMins: Interval[]): [number, number][] {
     Math.floor(e / MINUTES_IN_UNIT),
   ] as [number, number]).filter(([s, e]) => s < e);
 }
+
+/** Returns the number of 30-min units of overlap between a person's availability and [t, t + meetingLength). */
+export function getOverlapUnits(timeAvUnits: [number, number][], t: number, meetingLength: number): number {
+  const meetingEnd = t + meetingLength;
+  let totalOverlap = 0;
+  for (const [b, e] of timeAvUnits) {
+    const overlapStart = Math.max(t, b);
+    const overlapEnd = Math.min(meetingEnd, e);
+    if (overlapEnd > overlapStart) {
+      totalOverlap += overlapEnd - overlapStart;
+    }
+  }
+  return totalOverlap;
+}
+
+/** Returns the minimum gap (in units) between a person's availability and the meeting time [t, t + meetingLength). Returns 0 if any overlap exists. */
+export function getDistanceUnits(timeAvUnits: [number, number][], t: number, meetingLength: number): number {
+  const meetingEnd = t + meetingLength;
+  let minDistance = Infinity;
+  for (const [b, e] of timeAvUnits) {
+    if (b < meetingEnd && e > t) return 0; // overlap exists
+    const dist = Math.min(Math.abs(b - meetingEnd), Math.abs(e - t));
+    if (dist < minDistance) minDistance = dist;
+  }
+  return minDistance === Infinity ? Infinity : minDistance;
+}
+
+/**
+ * Converts an IANA timezone string to synthetic availability representing 9am-9pm Mon-Fri.
+ * Returns Interval[] in weekly minutes, same format as parseIntervals().
+ * Minutes in a week: Mon=0-1440, Tue=1440-2880, ..., Fri=5760-7200
+ */
+export function generateDefaultAvailability(timezone: string): Interval[] {
+  // Get UTC offset for this timezone
+  const now = new Date();
+  const utcString = now.toLocaleString('en-US', { timeZone: 'UTC' });
+  const tzString = now.toLocaleString('en-US', { timeZone: timezone });
+  const utcDate = new Date(utcString);
+  const tzDate = new Date(tzString);
+  const offsetMinutes = (tzDate.getTime() - utcDate.getTime()) / 60000;
+
+  const intervals: Interval[] = [];
+  // Mon-Fri (days 0-4), 9am-9pm local = 540-1260 minutes into the day
+  for (let day = 0; day < 5; day++) {
+    const dayStartMinutes = day * 24 * 60;
+    // Convert local times to the weekly-minutes reference frame
+    // The reference frame is assumed to be UTC, so we subtract the offset
+    const start = dayStartMinutes + 9 * 60 - offsetMinutes;
+    const end = dayStartMinutes + 21 * 60 - offsetMinutes;
+    // Clamp to valid week range [0, 10080]
+    const clampedStart = Math.max(0, Math.min(10080, start));
+    const clampedEnd = Math.max(0, Math.min(10080, end));
+    if (clampedEnd > clampedStart) {
+      intervals.push([clampedStart, clampedEnd] as Interval);
+    }
+  }
+  return intervals;
+}
+
+/**
+ * Expands a person's availability to all 7 days of the week.
+ * Extracts time-of-day windows (ignoring which day) and replicates across Mon-Sun.
+ * E.g., [Monday 13:00-15:00] → [Mon 13:00-15:00, Tue 13:00-15:00, ..., Sun 13:00-15:00]
+ */
+export function expandAvailability(timeAvMins: Interval[]): Interval[] {
+  const MINUTES_IN_DAY = 24 * 60;
+
+  // Extract unique time-of-day windows
+  const timeOfDayWindows: [number, number][] = [];
+  for (const [start, end] of timeAvMins) {
+    const startOfDay = start % MINUTES_IN_DAY;
+    const endOfDay = startOfDay + (end - start);
+    // Only add if this time-of-day window isn't already captured
+    const isDuplicate = timeOfDayWindows.some(
+      ([s, e]) => s === startOfDay && e === endOfDay
+    );
+    if (!isDuplicate) {
+      timeOfDayWindows.push([startOfDay, Math.min(endOfDay, MINUTES_IN_DAY)]);
+    }
+  }
+
+  // Replicate across all 7 days
+  const expanded: Interval[] = [];
+  for (let day = 0; day < 7; day++) {
+    const dayStart = day * MINUTES_IN_DAY;
+    for (const [todStart, todEnd] of timeOfDayWindows) {
+      const start = dayStart + todStart;
+      const end = dayStart + todEnd;
+      if (end <= 10080 && end > start) {
+        expanded.push([start, end] as Interval);
+      }
+    }
+  }
+  return expanded;
+}
