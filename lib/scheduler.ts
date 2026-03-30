@@ -303,9 +303,13 @@ function findBestTimeSlot(
   return bestTime;
 }
 
+/** Minimum number of participants to justify creating a new group.
+ *  If fewer people need spots, they'll be overfilled into existing groups instead. */
+const MIN_FILL_THRESHOLD = 5;
+
 /** Determine how many new groups need to be created.
- *  Returns 0 if existing capacity is sufficient, no facilitators are available,
- *  or there aren't enough unassigned people to form a group. */
+ *  Returns 0 if existing capacity is sufficient (including overfill tolerance),
+ *  no facilitators are available, or there aren't enough unassigned people. */
 function computeNewGroupsNeeded(
   unassignedCount: number,
   allCohorts: Cohort[],
@@ -315,7 +319,7 @@ function computeNewGroupsNeeded(
   personById: Record<string, Person>,
   isNeutralOrLater: boolean,
 ): number {
-  // Compute remaining capacity in existing cohorts
+  // Compute remaining capacity in existing cohorts (at max, before overfill)
   let remainingCapacity = 0;
   for (const cohort of allCohorts) {
     // In neutral+ cycles, skip cohorts that have strong-yes members — neutrals can't use them
@@ -330,12 +334,22 @@ function computeNewGroupsNeeded(
     remainingCapacity += participantType.max - currentCount;
   }
 
-  const deficit = unassignedCount - remainingCapacity;
+  // Include overfill tolerance: up to half the existing groups can take +1
+  const numExistingGroups = allCohorts.length;
+  const overfillSlots = Math.floor(numExistingGroups / 2);
+  const totalCapacity = remainingCapacity + overfillSlots;
+
+  const deficit = unassignedCount - totalCapacity;
   if (deficit <= 0) return 0;
-  if (unassignedCount < participantType.min) return 0;
+  if (deficit < MIN_FILL_THRESHOLD) return 0;
   if (unassignedFacilitators.length < facilitatorType.min) return 0;
 
-  const maxByParticipants = Math.ceil(deficit / participantType.max);
+  // Only create groups we can fill to at least MIN_FILL_THRESHOLD
+  const numFullGroups = Math.floor(deficit / participantType.max);
+  const remainder = deficit - (numFullGroups * participantType.max);
+  const extraGroup = remainder >= MIN_FILL_THRESHOLD ? 1 : 0;
+  const maxByParticipants = numFullGroups + extraGroup;
+
   const maxByFacilitators = Math.floor(unassignedFacilitators.length / facilitatorType.min);
   return Math.min(maxByParticipants, maxByFacilitators);
 }
@@ -1127,7 +1141,8 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   allCohorts.length = 0;
   allCohorts.push(...validCohorts);
 
-  // Step B: Greedy fill for still-unassigned people
+  // Step B: Greedy fill for still-unassigned people (with overfill support)
+  // Overfill rules: a group can go +1 over max, but no more than half the groups can be overfilled.
   const stillUnassigned: { person: Person; personType: PersonType }[] = [];
   for (const pt of personTypes) {
     for (const p of pt.people) {
@@ -1139,6 +1154,8 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
 
   if (stillUnassigned.length > 0) {
     const MAX_GREY_PER_COHORT = 3;
+    const maxOverfilledGroups = Math.floor(allCohorts.length / 2);
+    const overfilledGroups = new Set<number>();
 
     for (const { person, personType: pt } of stillUnassigned) {
       let bestCohortIdx = -1;
@@ -1147,7 +1164,15 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
       for (let ci = 0; ci < allCohorts.length; ci++) {
         const cohort = allCohorts[ci]!;
         const currentCount = (cohort.people[pt.name] ?? []).length;
-        if (currentCount >= pt.max) continue;
+        const isOverfill = currentCount >= pt.max;
+
+        // Check capacity: allow +1 overfill if this group isn't already overfilled
+        // and we haven't hit the max number of overfilled groups
+        if (isOverfill) {
+          if (currentCount >= pt.max + 1) continue; // already overfilled
+          if (overfilledGroups.has(ci)) continue; // already counted as overfilled
+          if (overfilledGroups.size >= maxOverfilledGroups) continue; // too many overfilled
+        }
 
         // Rank isolation: strong-yes can't go into neutral cohorts, and vice versa
         if (person.rank === 0) {
@@ -1177,9 +1202,11 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
           if (existingGrey >= MAX_GREY_PER_COHORT) continue;
         }
 
+        // Prefer non-overfill slots over overfill slots
         const overlap = Math.max(overlapOrig, overlapExp);
-        if (overlap > bestOverlap) {
-          bestOverlap = overlap;
+        const adjustedOverlap = isOverfill ? overlap - 100000 : overlap;
+        if (adjustedOverlap > bestOverlap) {
+          bestOverlap = adjustedOverlap;
           bestCohortIdx = ci;
         }
       }
@@ -1187,9 +1214,11 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
       if (bestCohortIdx >= 0) {
         const cohort = allCohorts[bestCohortIdx]!;
         if (!cohort.people[pt.name]) cohort.people[pt.name] = [];
+        const wasAtMax = (cohort.people[pt.name]!.length >= pt.max);
         cohort.people[pt.name]!.push(person.id);
         assignedIds.add(person.id);
         if (pt.name === facilitatorType.name) assignedFacIds.add(person.id);
+        if (wasAtMax) overfilledGroups.add(bestCohortIdx);
 
         // Compute tier
         if (!cohort.personTiers) cohort.personTiers = {};
