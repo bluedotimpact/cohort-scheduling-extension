@@ -371,15 +371,11 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
   }
   const sortedRanks: number[] = Array.from(rankSet).sort((a, b) => a - b);
 
-  // Determine the neutral rank (highest numeric rank across ALL people)
-  // Used to prevent neutral/strong-yes mixing in Phase 1 carry-forwards
-  const globalRanks: number[] = [];
-  for (const pt of personTypes) {
-    for (const p of pt.people) {
-      if (p.rank !== undefined) globalRanks.push(p.rank);
-    }
-  }
-  const neutralRank = globalRanks.length > 0 ? Math.max(...globalRanks) : undefined;
+  // Neutral rank is hardcoded to match the rank mapping in algorithm.tsx:
+  // "Strong yes" = 0, "Weak yes" = 1, "Neutral" = 2
+  // This ensures isolation rules only apply when someone actually has the "Neutral" label,
+  // not just because they have the highest rank present in the data.
+  const neutralRank = 2;
 
   // Compute maxT across all people for time slots (used in Phase 3)
   let maxT = 0;
