@@ -598,14 +598,19 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
                 personTiers: {},
               });
 
-              // Reserve facilitators
+              // Assign facilitators directly to the new cohort
               const availFacs = unassignedByType[facilitatorType.name] ?? [];
               const eligibleFacs = availFacs.filter(f => {
                 const overlap = getOverlapUnits(f.timeAvUnits, bestTime!, lengthOfMeetingInUnits);
                 return overlap >= overlapThresholdByType[facilitatorType.name]!;
               });
+              const newCohort = newCohorts[newCohorts.length - 1]!;
               for (let j = 0; j < Math.min(facilitatorType.min, eligibleFacs.length); j++) {
-                phase3AssignedFacIds.add(eligibleFacs[j]!.id);
+                const fac = eligibleFacs[j]!;
+                newCohort.people[facilitatorType.name]!.push(fac.id);
+                newCohort.personTiers![fac.id] = 1;
+                phase3AssignedFacIds.add(fac.id);
+                assignedFacIds.add(fac.id);
               }
             }
           };
