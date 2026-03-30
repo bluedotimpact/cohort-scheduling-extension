@@ -16,6 +16,8 @@ import { calculateScheduleOverlap, format, fromDate, Interval, parseIntervals } 
 import { Preset } from ".";
 import { getEmailFieldId, getFacilitatorBlockedTimes } from "../lib/facilitatorUtils";
 import { Cohort } from "../lib/scheduler";
+import { getOverlapUnits, toTimeAvUnits } from "../lib/util";
+import { MINUTES_IN_UNIT } from "../lib/constants";
 import { CohortBlob, PersonBlob } from "./components/Blobs";
 import { TimeAvWidget, TimeAvWidgetProps } from "./components/TimeAvWidget";
 import { PersonType } from "./setup";
@@ -233,6 +235,25 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
     return [...acc, ...people];
   }, []);
 
+  // Compute personTiers on the fly if not already provided (e.g., viewing from Airtable)
+  const personTiers: Record<string, 1 | 2 | 3> = cohort.personTiers ?? {};
+  if (!cohort.personTiers) {
+    const meetingLengthMins = cohort.endTime - cohort.startTime;
+    const meetingLengthUnits = meetingLengthMins / MINUTES_IN_UNIT;
+    const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
+    for (const person of allPeople) {
+      const units = toTimeAvUnits(person.timeAv);
+      const overlap = getOverlapUnits(units, timeUnit, meetingLengthUnits);
+      if (overlap >= meetingLengthUnits) {
+        personTiers[person.id] = 1;
+      } else if (overlap >= 1) {
+        personTiers[person.id] = 2;
+      } else {
+        personTiers[person.id] = 3;
+      }
+    }
+  }
+
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
       if (e.key == "ArrowLeft" || e.key == "ArrowRight") {
@@ -334,7 +355,7 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
                       (hoveredPerson === person ? "text-slate-500" : "")
                     }
                   >
-                    <PersonBlob key={personID} name={person.name} tier={cohort.personTiers?.[personID]} />
+                    <PersonBlob key={personID} name={person.name} tier={personTiers[personID]} />
                   </div>
                 );
               })}
