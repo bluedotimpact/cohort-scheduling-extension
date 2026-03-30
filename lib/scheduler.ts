@@ -640,6 +640,32 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
             phase3AssignedFacIds.add(fac.id);
             assignedFacIds.add(fac.id);
           }
+
+          // Assign participants greedily to the new cohort (best overlap first)
+          const availParticipants = unassignedByType[participantType.name] ?? [];
+          const scoredParticipants = availParticipants
+            .map(p => {
+              const overlap = getOverlapUnits(p.timeAvUnits, bestTime!, lengthOfMeetingInUnits);
+              return { person: p, overlap };
+            })
+            .filter(({ overlap }) => overlap >= overlapThresholdByType[participantType.name]!)
+            .sort((a, b) => b.overlap - a.overlap);
+
+          for (let j = 0; j < Math.min(participantType.max, scoredParticipants.length); j++) {
+            const { person, overlap } = scoredParticipants[j]!;
+            newCohort.people[participantType.name]!.push(person.id);
+            if (overlap >= lengthOfMeetingInUnits) {
+              newCohort.personTiers![person.id] = 1;
+            } else if (overlap >= 1) {
+              newCohort.personTiers![person.id] = 2;
+            } else {
+              newCohort.personTiers![person.id] = 3;
+            }
+            assignedIds.add(person.id);
+          }
+
+          // Compute majorityRank now that participants are assigned
+          newCohort.majorityRank = computeMajorityRank(newCohort, personById, participantType.name);
         }
       };
 
@@ -1076,6 +1102,113 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     }
 
 
+  }
+
+  // ── Post-Phase 4 validation: remove invalid groups and greedy fill ──
+
+  // Step A: Remove cohorts that have facilitator(s) but no participants, or vice versa
+  const validCohorts: Cohort[] = [];
+  for (const cohort of allCohorts) {
+    const participantCount = (cohort.people[participantType.name] ?? []).length;
+    const facilitatorCount = (cohort.people[facilitatorType.name] ?? []).length;
+
+    if ((facilitatorCount > 0 && participantCount === 0) || (participantCount > 0 && facilitatorCount === 0)) {
+      // Invalid group — un-assign all members so they can be redistributed
+      for (const ptName of Object.keys(cohort.people)) {
+        for (const pid of cohort.people[ptName]!) {
+          assignedIds.delete(pid);
+          assignedFacIds.delete(pid);
+        }
+      }
+    } else {
+      validCohorts.push(cohort);
+    }
+  }
+  allCohorts.length = 0;
+  allCohorts.push(...validCohorts);
+
+  // Step B: Greedy fill for still-unassigned people
+  const stillUnassigned: { person: Person; personType: PersonType }[] = [];
+  for (const pt of personTypes) {
+    for (const p of pt.people) {
+      if (!assignedIds.has(p.id)) {
+        stillUnassigned.push({ person: p, personType: pt });
+      }
+    }
+  }
+
+  if (stillUnassigned.length > 0) {
+    const MAX_GREY_PER_COHORT = 3;
+
+    for (const { person, personType: pt } of stillUnassigned) {
+      let bestCohortIdx = -1;
+      let bestOverlap = -1;
+
+      for (let ci = 0; ci < allCohorts.length; ci++) {
+        const cohort = allCohorts[ci]!;
+        const currentCount = (cohort.people[pt.name] ?? []).length;
+        if (currentCount >= pt.max) continue;
+
+        // Rank isolation: strong-yes can't go into neutral cohorts, and vice versa
+        if (person.rank === 0) {
+          const hasNeutral = Object.values(cohort.people).flat().some(pid => {
+            const p = personById[pid];
+            return p && p.rank === neutralRank;
+          });
+          if (hasNeutral) continue;
+        }
+        if (person.rank === neutralRank) {
+          const hasStrongYes = Object.values(cohort.people).flat().some(pid => {
+            const p = personById[pid];
+            return p && p.rank === 0;
+          });
+          if (hasStrongYes) continue;
+        }
+
+        const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
+        const overlapOrig = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
+        const expanded = expandAvailability(person.timeAvMins);
+        const expandedUnits = toTimeAvUnits(expanded);
+        const overlapExp = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
+
+        // Grey cap check: if person would be grey, check existing grey count
+        if (overlapOrig < 1 && overlapExp < 1 && pt.name !== facilitatorType.name) {
+          const existingGrey = countExistingGrey(cohort, personById, participantType.name, lengthOfMeetingInUnits);
+          if (existingGrey >= MAX_GREY_PER_COHORT) continue;
+        }
+
+        const overlap = Math.max(overlapOrig, overlapExp);
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          bestCohortIdx = ci;
+        }
+      }
+
+      if (bestCohortIdx >= 0) {
+        const cohort = allCohorts[bestCohortIdx]!;
+        if (!cohort.people[pt.name]) cohort.people[pt.name] = [];
+        cohort.people[pt.name]!.push(person.id);
+        assignedIds.add(person.id);
+        if (pt.name === facilitatorType.name) assignedFacIds.add(person.id);
+
+        // Compute tier
+        if (!cohort.personTiers) cohort.personTiers = {};
+        const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
+        const overlapOrig = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
+        if (overlapOrig >= lengthOfMeetingInUnits) {
+          cohort.personTiers[person.id] = 1;
+        } else if (overlapOrig >= 1) {
+          cohort.personTiers[person.id] = 2;
+        } else {
+          cohort.personTiers[person.id] = 3;
+        }
+      }
+    }
+
+    // Recompute majority ranks after greedy fill
+    for (const cohort of allCohorts) {
+      cohort.majorityRank = computeMajorityRank(cohort, personById, participantType.name);
+    }
   }
 
   return allCohorts;
