@@ -685,6 +685,7 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
 
   // Rank-distance weight tables
   const fullOverlapWeights = [20000, 15000, 10000];
+  const halfOverlapWeights = [12000, 9000, 6000];
   const partialOverlapWeights = [8000, 5000, 3000];
   const expandedOverlapWeights = [800, 500, 100];
 
@@ -755,9 +756,13 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
         const personRank = person.rank ?? 999;
         const rankDistance = Math.abs(personRank - majorityRank);
 
+        const halfMeetingLength = Math.ceil(lengthOfMeetingInUnits * 0.5);
+
         let coef = 0;
         if (overlapOriginal >= lengthOfMeetingInUnits) {
           coef = getRankWeight(fullOverlapWeights, rankDistance);
+        } else if (overlapOriginal >= halfMeetingLength) {
+          coef = getRankWeight(halfOverlapWeights, rankDistance);
         } else if (overlapOriginal >= 1) {
           coef = getRankWeight(partialOverlapWeights, rankDistance);
         } else if (overlapExpanded >= 1) {
