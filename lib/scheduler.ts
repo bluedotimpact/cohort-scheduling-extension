@@ -1,7 +1,7 @@
 import GLPK, { LP, Options } from "glpk.js";
 import { Interval, WeeklyTime } from "weekly-availabilities";
 import { MINUTES_IN_UNIT } from "./constants";
-import { getOverlapUnits, expandAvailability, toTimeAvUnits } from "./util";
+import { getOverlapUnits, expandAvailability, toTimeAvUnits, generateDefaultAvailability } from "./util";
 
 export interface SchedulerInput {
   lengthOfMeetingMins: number,
@@ -712,6 +712,19 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
       expandedAvByPerson.set(person.id, toTimeAvUnits(expanded));
     }
 
+    // Pre-compute timezone-based 9am-9pm availability (fallback for people with no overlap)
+    const timezoneAvByPerson = new Map<string, [number, number][]>();
+    for (const { person } of people) {
+      if (person.timezone) {
+        try {
+          const tzAv = generateDefaultAvailability(person.timezone);
+          timezoneAvByPerson.set(person.id, toTimeAvUnits(tzAv));
+        } catch {
+          // Invalid timezone, skip
+        }
+      }
+    }
+
     const binaries: string[] = [];
     const objVars: { name: string; coef: number }[] = [];
 
@@ -749,8 +762,15 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
           coef = getRankWeight(partialOverlapWeights, rankDistance);
         } else if (overlapExpanded >= 1) {
           coef = getRankWeight(expandedOverlapWeights, rankDistance);
-        } else if (person.tier === 3) {
-          coef = 1;
+        } else {
+          // No real or expanded overlap — fall back to timezone-based 9am-9pm availability
+          const tzUnits = timezoneAvByPerson.get(person.id);
+          if (tzUnits) {
+            const overlapTz = getOverlapUnits(tzUnits, timeUnit, lengthOfMeetingInUnits);
+            if (overlapTz >= 1) {
+              coef = 1;
+            }
+          }
         }
 
         objVars.push({ name: varName, coef });
