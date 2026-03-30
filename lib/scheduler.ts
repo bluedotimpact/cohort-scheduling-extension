@@ -343,6 +343,13 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
 
   const glpk = await GLPK();
 
+  // Exclude people with no availability and no timezone — they can't be meaningfully scheduled.
+  // They remain in the caller's personTypes for the "Unused people" UI display.
+  personTypes = personTypes.map(pt => ({
+    ...pt,
+    people: pt.people.filter(p => p.timeAvUnits.length > 0 || p.timezone),
+  }));
+
   // Build lookups
   const personById: Record<string, Person> = {};
   const personTypeByPersonId: Record<string, PersonType> = {};
