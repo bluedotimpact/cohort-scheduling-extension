@@ -1262,7 +1262,170 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     }
   }
 
+  // ── Spread groups across days ──
+  spreadGroupsAcrossDays(allCohorts, personById, lengthOfMeetingInUnits, allTimeSlots, participantType.name);
+
   return allCohorts;
+}
+
+/** Compute tier from overlap units. */
+function computeTier(overlap: number, meetingLengthUnits: number): 1 | 2 | 3 {
+  if (overlap >= meetingLengthUnits) return 1;
+  if (overlap >= 1) return 2;
+  return 3;
+}
+
+const MINUTES_IN_DAY = 24 * 60;
+const UNITS_PER_DAY = MINUTES_IN_DAY / MINUTES_IN_UNIT;
+
+/** Post-processing: try to move groups from crowded days to less crowded days.
+ *  A day is "crowded" if it has more groups than ceil(totalGroups / 7).
+ *  Moves are only allowed if at most 1 person drops a tier and no one goes tier 2 → 3. */
+function spreadGroupsAcrossDays(
+  allCohorts: Cohort[],
+  personById: Record<string, Person>,
+  lengthOfMeetingInUnits: number,
+  allTimeSlots: number[],
+  participantTypeName: string,
+): void {
+  if (allCohorts.length <= 1) return;
+
+  const getDay = (cohort: Cohort): number => Math.floor(cohort.startTime / MINUTES_IN_DAY);
+
+  for (;;) {
+    const idealPerDay = Math.ceil(allCohorts.length / 7);
+
+    // Count groups per day
+    const dayCounts: Record<number, number> = {};
+    for (const cohort of allCohorts) {
+      const day = getDay(cohort);
+      dayCounts[day] = (dayCounts[day] ?? 0) + 1;
+    }
+
+    // Find crowded days (count > ideal), sorted by most crowded first
+    const crowdedDays = Object.entries(dayCounts)
+      .filter(([, count]) => count > idealPerDay)
+      .sort((a, b) => b[1] - a[1])
+      .map(([day]) => parseInt(day));
+
+    if (crowdedDays.length === 0) break;
+
+    let moved = false;
+
+    for (const crowdedDay of crowdedDays) {
+      if (moved) break;
+
+      // Get groups on this day, smallest first (easier to move)
+      const groupsOnDay = allCohorts
+        .filter(c => getDay(c) === crowdedDay)
+        .sort((a, b) => {
+          const sizeA = Object.values(a.people).flat().length;
+          const sizeB = Object.values(b.people).flat().length;
+          return sizeA - sizeB;
+        });
+
+      for (const cohort of groupsOnDay) {
+        if (moved) break;
+
+        // Target days: days with fewer groups than ideal, sorted by fewest first
+        const targetDays = Array.from({ length: 7 }, (_, i) => i)
+          .filter(d => d !== crowdedDay && (dayCounts[d] ?? 0) < idealPerDay)
+          .sort((a, b) => (dayCounts[a] ?? 0) - (dayCounts[b] ?? 0));
+
+        if (targetDays.length === 0) continue;
+
+        // Get all members and their current tiers
+        const members: { id: string; person: Person; currentTier: 1 | 2 | 3 }[] = [];
+        for (const ptName of Object.keys(cohort.people)) {
+          for (const pid of cohort.people[ptName]!) {
+            const person = personById[pid];
+            if (!person) continue;
+            const currentTier = cohort.personTiers?.[pid] ?? 1;
+            members.push({ id: pid, person, currentTier });
+          }
+        }
+
+        let bestSlot: { time: number; drops: number; totalOverlap: number } | null = null;
+
+        for (const targetDay of targetDays) {
+          const dayStartUnit = targetDay * UNITS_PER_DAY;
+          const dayEndUnit = dayStartUnit + UNITS_PER_DAY;
+
+          // Only consider time slots on this target day
+          const candidateSlots = allTimeSlots.filter(
+            t => t >= dayStartUnit && t + lengthOfMeetingInUnits <= dayEndUnit
+          );
+
+          for (const t of candidateSlots) {
+            const candidateStartMins = t * MINUTES_IN_UNIT;
+            const candidateEndMins = (t + lengthOfMeetingInUnits) * MINUTES_IN_UNIT;
+
+            let valid = true;
+            let drops = 0;
+            let totalOverlap = 0;
+
+            for (const { person, currentTier } of members) {
+              // Check facilitator blocked times
+              if (person.blockedTimes) {
+                const conflicts = person.blockedTimes.some(
+                  ([bStart, bEnd]) => candidateStartMins < bEnd && bStart < candidateEndMins
+                );
+                if (conflicts) { valid = false; break; }
+              }
+
+              const overlap = getOverlapUnits(person.timeAvUnits, t, lengthOfMeetingInUnits);
+              const newTier = computeTier(overlap, lengthOfMeetingInUnits);
+              totalOverlap += overlap;
+
+              if (newTier > currentTier) {
+                // Tier dropped (higher number = worse)
+                if (currentTier === 2 && newTier === 3) {
+                  // Not allowed: partial → none
+                  valid = false; break;
+                }
+                drops++;
+                if (drops > 1) { valid = false; break; }
+              }
+            }
+
+            if (!valid) continue;
+
+            // Prefer: fewest drops, then highest total overlap
+            if (
+              bestSlot === null ||
+              drops < bestSlot.drops ||
+              (drops === bestSlot.drops && totalOverlap > bestSlot.totalOverlap)
+            ) {
+              bestSlot = { time: t, drops, totalOverlap };
+            }
+          }
+
+          // If we found a perfect slot (0 drops) on this target day, no need to check other days
+          if (bestSlot && bestSlot.drops === 0) break;
+        }
+
+        if (bestSlot) {
+          // Move the cohort
+          cohort.startTime = (bestSlot.time * MINUTES_IN_UNIT) as typeof cohort.startTime;
+          cohort.endTime = ((bestSlot.time + lengthOfMeetingInUnits) * MINUTES_IN_UNIT) as typeof cohort.endTime;
+
+          // Recompute tiers for all members
+          if (!cohort.personTiers) cohort.personTiers = {};
+          for (const { id, person } of members) {
+            const overlap = getOverlapUnits(person.timeAvUnits, bestSlot.time, lengthOfMeetingInUnits);
+            cohort.personTiers[id] = computeTier(overlap, lengthOfMeetingInUnits);
+          }
+
+          // Recompute majority rank
+          cohort.majorityRank = computeMajorityRank(cohort, personById, participantTypeName);
+
+          moved = true;
+        }
+      }
+    }
+
+    if (!moved) break; // No more improvements possible
+  }
 }
 
 /** Determine facilitator groups to try for a given rank cycle.
