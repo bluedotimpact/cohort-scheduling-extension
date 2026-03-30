@@ -11,7 +11,7 @@ import {
   useRecords,
   useWatchable
 } from "@airtable/blocks/ui";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { calculateScheduleOverlap, format, fromDate, Interval, parseIntervals } from "weekly-availabilities";
 import { Preset } from ".";
 import { getEmailFieldId, getFacilitatorBlockedTimes } from "../lib/facilitatorUtils";
@@ -236,8 +236,9 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
   }, []);
 
   // Compute personTiers on the fly if not already provided (e.g., viewing from Airtable)
-  const personTiers: Record<string, 1 | 2 | 3> = cohort.personTiers ?? {};
-  if (!cohort.personTiers) {
+  const personTiers = useMemo(() => {
+    if (cohort.personTiers) return cohort.personTiers;
+    const tiers: Record<string, 1 | 2 | 3> = {};
     const meetingLengthMins = cohort.endTime - cohort.startTime;
     const meetingLengthUnits = meetingLengthMins / MINUTES_IN_UNIT;
     const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
@@ -245,14 +246,15 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
       const units = toTimeAvUnits(person.timeAv);
       const overlap = getOverlapUnits(units, timeUnit, meetingLengthUnits);
       if (overlap >= meetingLengthUnits) {
-        personTiers[person.id] = 1;
+        tiers[person.id] = 1;
       } else if (overlap >= 1) {
-        personTiers[person.id] = 2;
+        tiers[person.id] = 2;
       } else {
-        personTiers[person.id] = 3;
+        tiers[person.id] = 3;
       }
     }
-  }
+    return tiers;
+  }, [cohort, allPeople]);
 
   useEffect(() => {
     const f = (e: KeyboardEvent) => {
@@ -288,22 +290,19 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoveredPerson]);
 
-  const combinedIntervals = calculateScheduleOverlap(allPeople.map(({ timeAv }) => timeAv));
+  const availabilitiesByCount = useMemo(() => {
+    const combinedIntervals = calculateScheduleOverlap(allPeople.map(({ timeAv }) => timeAv));
+    return combinedIntervals.reduce<{ [count: number]: Interval[] }>((acc, cur) => {
+      acc[cur.count] = acc[cur.count] ?? []
+      acc[cur.count]!.push(cur.interval)
+      return acc;
+    }, {});
+  }, [allPeople]);
 
-  const availabilitiesByCount = combinedIntervals.reduce<{ [count: number]: Interval[] }>((acc, cur) => {
-    acc[cur.count] = acc[cur.count] ?? []
-    acc[cur.count]!.push(cur.interval)
-    return acc;
-  }, {})
-
-  const agreedTime: TimeAvWidgetProps["availabilities"][number] = {
-    intervals: [[cohort.startTime, cohort.endTime]],
-    class: "bg-purple-500",
-  }
   const [showAgreedTime, setShowAgreedTime] = useState(true);
   const [showFacilitatorBlockedTimes, setShowFacilitatorBlockedTimes] = useState(true);
 
-  const availabilities: TimeAvWidgetProps["availabilities"] = [
+  const availabilities: TimeAvWidgetProps["availabilities"] = useMemo(() => [
     (hoveredPerson ? [{
       intervals: hoveredPerson.timeAv,
       class: "bg-green-500",
@@ -318,8 +317,11 @@ export const ViewCohort = ({ cohort, facilitatorBlockedTimes }: { cohort: Cohort
       class: "bg-red-500",
       opacity: 0.9,
     }] : []),
-    (showAgreedTime ? [agreedTime] : []),
-  ].flat(1)
+    (showAgreedTime ? [{
+      intervals: [[cohort.startTime, cohort.endTime]] as Interval[],
+      class: "bg-purple-500",
+    }] : []),
+  ].flat(1), [hoveredPerson, availabilitiesByCount, allPeople.length, showFacilitatorBlockedTimes, facilitatorBlockedTimes, showAgreedTime, cohort.startTime, cohort.endTime]);
 
   return (
     <>

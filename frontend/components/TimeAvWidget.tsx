@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { MINUTES_IN_UNIT } from "../../lib/constants";
-import { Interval, WeeklyTime, format, isInInterval } from "weekly-availabilities";
+import { Interval, WeeklyTime, format } from "weekly-availabilities";
 
 const dayLabels = [
   "Mon",
@@ -32,6 +32,22 @@ export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
   const cellHeight = 6 / unitsPerHour;
   const leftColumnWidth = 12;
   const unitsPerLabel = unitsPerHour / 2;
+
+  // Pre-compute a bitmap (Set of active unit indices) per availability layer
+  // so rendering is a Set.has() lookup instead of isInInterval() per cell
+  const availabilityBitmaps = useMemo(() => {
+    return availabilities.map(a => {
+      const activeUnits = new Set<number>();
+      for (const [start, end] of a.intervals) {
+        const startUnit = Math.floor(start / MINUTES_IN_UNIT);
+        const endUnit = Math.ceil(end / MINUTES_IN_UNIT);
+        for (let u = startUnit; u < endUnit; u++) {
+          activeUnits.add(u);
+        }
+      }
+      return { ...a, activeUnits };
+    });
+  }, [availabilities]);
 
   return (
     <div>
@@ -74,9 +90,7 @@ export function TimeAvWidget({ availabilities }: TimeAvWidgetProps) {
             style={{ gridTemplateRows: "repeat(" + (24 * unitsPerHour) + ", minmax(0, 1fr))" }}
           >
             {unitIndexes.map((number) => {
-              const relevantAvailabilities = availabilities.filter(a =>
-                a.intervals.some(interval => isInInterval(interval, number * MINUTES_IN_UNIT as WeeklyTime))
-              )
+              const relevantAvailabilities = availabilityBitmaps.filter(a => a.activeUnits.has(number));
 
               const isEven = Math.floor(number) % unitsPerLabel == 0;
               return (
