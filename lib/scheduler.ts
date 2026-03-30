@@ -36,10 +36,7 @@ export interface Cohort {
   majorityRank?: number | undefined,
 }
 
-const toBinary = (personType: PersonType, person: Person, t: number): string => JSON.stringify([personType.name, person.id, t.toString()]);
-const fromBinary = (binary: string): [string, string, string] => JSON.parse(binary);
-
-const getCohortCount = (t: number): string => `cohortCount-${t}`;
+const getCohortCount = (t: number): string => `cc_${t}`;
 
 /** Phase 1: Original LP solver — extracted from the previous solve() */
 async function solvePhase1(
@@ -63,94 +60,115 @@ async function solvePhase1(
     },
   };
 
-  let maxT = 0;
-  for (const personType of personTypes)
-    for (const person of personType.people)
-      for (const interval of person.timeAvUnits)
-        for (const t of interval) if (t > maxT) maxT = t;
-
-  const times = Array.from({ length: maxT }, (_, i) => i);
-
-  // VARIABLES
-  const binaries: string[] = [];
+  // Build person index for fast variable naming (avoids JSON.stringify)
+  const personIndex: { personType: PersonType; person: Person; idx: number }[] = [];
   for (const personType of personTypes) {
     for (const person of personType.people) {
-      for (const t of times) {
-        binaries.push(toBinary(personType, person, t));
+      personIndex.push({ personType, person, idx: personIndex.length });
+    }
+  }
+
+  // Pre-compute available time slots per person (only where full overlap exists)
+  // This eliminates ~90% of variables that would be forced to 0 by availability constraints
+  const availableTimesPerPerson: Set<number>[] = personIndex.map(({ person }) => {
+    const available = new Set<number>();
+    for (const [b, e] of person.timeAvUnits) {
+      for (let t = b; t <= e - lengthOfMeetingInUnits; t++) {
+        available.add(t);
       }
+    }
+    return available;
+  });
+
+  // Collect all time slots where at least one person is available
+  const activeTimeSlots = new Set<number>();
+  for (const times of availableTimesPerPerson) {
+    for (const t of times) activeTimeSlots.add(t);
+  }
+
+  // Variable naming: v_{personIdx}_{t} — simple string concatenation, no JSON
+  const varName = (pIdx: number, t: number): string => `v_${pIdx}_${t}`;
+
+  // VARIABLES — only create for (person, time) pairs where the person is available
+  const binaries: string[] = [];
+  const binarySet = new Set<string>();
+  for (const { idx } of personIndex) {
+    for (const t of availableTimesPerPerson[idx]!) {
+      const v = varName(idx, t);
+      binaries.push(v);
+      binarySet.add(v);
     }
   }
 
   const cohortCounts: string[] = [];
-  for (const t of times) {
+  for (const t of activeTimeSlots) {
     cohortCounts.push(getCohortCount(t));
   }
 
+  // CONSTRAINTS
   const assignmentConstraints: LP["subjectTo"] = [];
-  const availabilityConstraints: LP["subjectTo"] = [];
   const nonOverlappingConstraints: LP["subjectTo"] = [];
-  for (const personType of personTypes) {
-    for (const person of personType.people) {
-      const personBinaries: string[] = [];
-      for (const t of times) {
-        const u = toBinary(personType, person, t);
-        personBinaries.push(u);
 
-        availabilityConstraints.push({
-          name: u + "-availability",
-          vars: [{ name: u, coef: 1 }],
-          bnds: {
-            type: glpk.GLP_UP,
-            ub: person.timeAvUnits.some(
-              ([b, e]) => b <= t && t <= e - lengthOfMeetingInUnits
-            )
-              ? 1
-              : 0,
-            lb: 0,
-          },
-        });
+  for (const { person, idx } of personIndex) {
+    const availableTimes = availableTimesPerPerson[idx]!;
+    if (availableTimes.size === 0) continue;
 
-        const meetingVars: string[] = [];
-        for (let i = 0; i < lengthOfMeetingInUnits; i++) {
-          meetingVars.push(toBinary(personType, person, t + i));
+    // Assignment constraint: sum of all this person's variables <= howManyCohorts
+    const personVars: { name: string; coef: number }[] = [];
+    for (const t of availableTimes) {
+      personVars.push({ name: varName(idx, t), coef: 1 });
+    }
+    assignmentConstraints.push({
+      name: `a_${idx}`,
+      vars: personVars,
+      bnds: { type: glpk.GLP_UP, ub: person.howManyCohorts, lb: 0 },
+    });
+
+    // Non-overlapping constraints: for each available time, the meeting window can only be used once
+    for (const t of availableTimes) {
+      const meetingVars: { name: string; coef: number }[] = [];
+      for (let i = 0; i < lengthOfMeetingInUnits; i++) {
+        const v = varName(idx, t + i);
+        if (binarySet.has(v)) {
+          meetingVars.push({ name: v, coef: 1 });
         }
+      }
+      if (meetingVars.length > 1) {
         nonOverlappingConstraints.push({
-          name: u + "-non-overlapping",
-          vars: meetingVars.map((u) => ({ name: u, coef: 1 })),
-          bnds: {
-            type: glpk.GLP_UP,
-            ub: 1,
-            lb: 0,
-          },
+          name: `no_${idx}_${t}`,
+          vars: meetingVars,
+          bnds: { type: glpk.GLP_UP, ub: 1, lb: 0 },
         });
       }
-
-      assignmentConstraints.push({
-        name: person.id + "-howManyCohorts",
-        vars: personBinaries.map((u) => ({ name: u, coef: 1 })),
-        bnds: { type: glpk.GLP_UP, ub: person.howManyCohorts, lb: 0 },
-      });
     }
   }
 
+  // Cohort count constraints: link person assignments to cohortCount variables
   const cohortCountConstraints: LP["subjectTo"] = [];
-  for (const t of times) {
-    for (const personType of personTypes) {
-      const personBinaries = personType.people.map(person => toBinary(personType, person, t));
+  for (const t of activeTimeSlots) {
+    for (let ptIdx = 0; ptIdx < personTypes.length; ptIdx++) {
+      const pt = personTypes[ptIdx]!;
+      const personVars: { name: string; coef: number }[] = [];
+      for (const { idx, personType } of personIndex) {
+        if (personType !== pt) continue;
+        if (availableTimesPerPerson[idx]!.has(t)) {
+          personVars.push({ name: varName(idx, t), coef: 1 });
+        }
+      }
 
       cohortCountConstraints.push({
-        name: personType.name + "-" + t + "-max",
+        name: `cx_${ptIdx}_${t}`,
         vars: [
-          ...personBinaries.map((u) => ({ name: u, coef: 1 })),
-          { name: getCohortCount(t), coef: -personType.max },
+          ...personVars,
+          { name: getCohortCount(t), coef: -pt.max },
         ],
         bnds: { type: glpk.GLP_UP, ub: 0, lb: 0 },
       });
       cohortCountConstraints.push({
-        name: personType.name + "-" + t + "-min",
+        name: `cn_${ptIdx}_${t}`,
         vars: [
-          ...personBinaries.map((u) => ({ name: u, coef: 1 })),
-          { name: getCohortCount(t), coef: -personType.min },
+          ...personVars,
+          { name: getCohortCount(t), coef: -pt.min },
         ],
         bnds: { type: glpk.GLP_LO, ub: 0, lb: 0 },
       });
@@ -159,7 +177,6 @@ async function solvePhase1(
 
   const constraints = [
     ...assignmentConstraints,
-    ...availabilityConstraints,
     ...nonOverlappingConstraints,
     ...cohortCountConstraints,
   ];
@@ -167,10 +184,10 @@ async function solvePhase1(
   try {
     const res = await glpk.solve(
       {
-        name: "eh?",
+        name: "phase1",
         objective: {
           direction: glpk.GLP_MAX,
-          name: "eh2?",
+          name: "obj",
           vars: binaries.map((u) => ({ name: u, coef: 1 })),
         },
         subjectTo: constraints,
@@ -180,15 +197,20 @@ async function solvePhase1(
       options
     );
 
+    // Parse results using variable name format v_{personIdx}_{t}
     const timeslots: Record<string, Record<string, string[]>> = {};
-    for (const binary of Object.keys(res.result.vars)) {
-      if (binary.includes("cohortCount")) continue;
-      const [personType, person, t] = fromBinary(binary);
-      if (res.result.vars[binary] == 1) {
-        if (!timeslots[t]) timeslots[t] = {};
-        if (!timeslots[t]![personType]) timeslots[t]![personType] = [];
-        timeslots[t]![personType]!.push(person);
-      }
+    for (const v of Object.keys(res.result.vars)) {
+      if (v.startsWith("cc_")) continue;
+      if (res.result.vars[v] !== 1) continue;
+
+      const parts = v.split("_");
+      const pIdx = parseInt(parts[1]!);
+      const t = parts[2]!;
+      const { personType, person } = personIndex[pIdx]!;
+
+      if (!timeslots[t]) timeslots[t] = {};
+      if (!timeslots[t]![personType.name]) timeslots[t]![personType.name] = [];
+      timeslots[t]![personType.name]!.push(person.id);
     }
 
     const largeCohorts: Cohort[] = [];
