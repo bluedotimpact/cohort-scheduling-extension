@@ -501,21 +501,28 @@ const AlgorithmPage = () => {
           {validationIssues.length > 0 && (
             <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-4 text-sm">
               <div className="font-medium">Missing data — these people may not be placed into groups correctly:</div>
-              <div className="mt-1 space-y-0.5">
-                {validationIssues.map((issue) => {
-                  const parts: string[] = [];
-                  if (issue.missingOpinion.length > 0) {
-                    parts.push(`${issue.missingOpinion.length} missing human opinion (${issue.missingOpinion.join(', ')})`);
-                  }
-                  if (issue.missingAvailability.length > 0) {
-                    parts.push(`${issue.missingAvailability.length} missing timezone & availability (${issue.missingAvailability.join(', ')})`);
-                  }
-                  return (
-                    <div key={issue.personTypeName}>
-                      <span className="font-medium">{issue.personTypeName}:</span> {parts.join(' · ')}
-                    </div>
-                  );
-                })}
+              <div className="mt-2 space-y-2">
+                {validationIssues.map((issue) => (
+                  <div key={issue.personTypeName}>
+                    <div className="font-medium">{issue.personTypeName}</div>
+                    {issue.missingOpinion.length > 0 && (
+                      <div className="ml-3">
+                        <div>{issue.missingOpinion.length} missing human opinion:</div>
+                        <ul className="ml-4 list-disc">
+                          {issue.missingOpinion.map((name) => <li key={name}>{name}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {issue.missingAvailability.length > 0 && (
+                      <div className="ml-3">
+                        <div>{issue.missingAvailability.length} missing timezone & availability:</div>
+                        <ul className="ml-4 list-disc">
+                          {issue.missingAvailability.map((name) => <li key={name}>{name}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
