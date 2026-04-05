@@ -20,6 +20,52 @@ import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
 import { ViewCohort } from "./view";
 
+interface ValidationIssue {
+  personTypeName: string;
+  missingOpinion: string[];
+  missingAvailability: string[];
+}
+
+const ValidationWarning: React.FC<{ issues: ValidationIssue[] }> = ({ issues }) => {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-4 text-sm">
+      <div className="flex justify-between items-start">
+        <div className="font-medium">Missing data — these people may not be placed into groups correctly:</div>
+        <button
+          className="text-amber-600 hover:text-amber-800 text-xs ml-2 whitespace-nowrap underline"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? 'Show less' : 'Show all'}
+        </button>
+      </div>
+      <div className={`mt-2 space-y-2 overflow-hidden ${expanded ? '' : 'max-h-24'}`}>
+        {issues.map((issue) => (
+          <div key={issue.personTypeName}>
+            <div className="font-medium">{issue.personTypeName}</div>
+            {issue.missingOpinion.length > 0 && (
+              <div className="ml-3">
+                <div>{issue.missingOpinion.length} missing human opinion:</div>
+                <ul className="ml-4 list-disc">
+                  {issue.missingOpinion.map((name) => <li key={name}>{name}</li>)}
+                </ul>
+              </div>
+            )}
+            {issue.missingAvailability.length > 0 && (
+              <div className="ml-3">
+                <div>{issue.missingAvailability.length} missing timezone & availability:</div>
+                <ul className="ml-4 list-disc">
+                  {issue.missingAvailability.map((name) => <li key={name}>{name}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 interface SolutionProps {
   solution: Cohort[],
   personTypes: SchedulerPersonType[],
@@ -499,32 +545,7 @@ const AlgorithmPage = () => {
       ) : (
         <div>
           {validationIssues.length > 0 && (
-            <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-4 text-sm">
-              <div className="font-medium">Missing data — these people may not be placed into groups correctly:</div>
-              <div className="mt-2 space-y-2">
-                {validationIssues.map((issue) => (
-                  <div key={issue.personTypeName}>
-                    <div className="font-medium">{issue.personTypeName}</div>
-                    {issue.missingOpinion.length > 0 && (
-                      <div className="ml-3">
-                        <div>{issue.missingOpinion.length} missing human opinion:</div>
-                        <ul className="ml-4 list-disc">
-                          {issue.missingOpinion.map((name) => <li key={name}>{name}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {issue.missingAvailability.length > 0 && (
-                      <div className="ml-3">
-                        <div>{issue.missingAvailability.length} missing timezone & availability:</div>
-                        <ul className="ml-4 list-disc">
-                          {issue.missingAvailability.map((name) => <li key={name}>{name}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ValidationWarning issues={validationIssues} />
           )}
           <div>
             <Heading>Input description</Heading>
