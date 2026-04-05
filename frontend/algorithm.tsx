@@ -26,40 +26,49 @@ interface ValidationIssue {
   missingAvailability: string[];
 }
 
-const ValidationWarning: React.FC<{ issues: ValidationIssue[] }> = ({ issues }) => {
+const ValidationIssueSection: React.FC<{ issue: ValidationIssue }> = ({ issue }) => {
   const [expanded, setExpanded] = useState(false);
+  const totalMissing = issue.missingOpinion.length + issue.missingAvailability.length;
+  return (
+    <div>
+      <button
+        className="flex items-center gap-1 font-medium hover:text-amber-900"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className="text-xs">{expanded ? '▼' : '▶'}</span>
+        {issue.personTypeName} ({totalMissing})
+      </button>
+      {expanded && (
+        <div className="ml-4 mt-1 space-y-1">
+          {issue.missingOpinion.length > 0 && (
+            <div>
+              <div>{issue.missingOpinion.length} missing human opinion:</div>
+              <ul className="ml-4 list-disc">
+                {issue.missingOpinion.map((name) => <li key={name}>{name}</li>)}
+              </ul>
+            </div>
+          )}
+          {issue.missingAvailability.length > 0 && (
+            <div>
+              <div>{issue.missingAvailability.length} missing timezone & availability:</div>
+              <ul className="ml-4 list-disc">
+                {issue.missingAvailability.map((name) => <li key={name}>{name}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ValidationWarning: React.FC<{ issues: ValidationIssue[] }> = ({ issues }) => {
   return (
     <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-4 text-sm">
-      <div className="flex justify-between items-start">
-        <div className="font-medium">Missing data — these people may not be placed into groups correctly:</div>
-        <button
-          className="text-amber-600 hover:text-amber-800 text-xs ml-2 whitespace-nowrap underline"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? 'Show less' : 'Show all'}
-        </button>
-      </div>
-      <div className={`mt-2 space-y-2 overflow-hidden ${expanded ? '' : 'max-h-24'}`}>
+      <div className="font-medium">Missing data — these people may not be placed into groups correctly:</div>
+      <div className="mt-2 space-y-1">
         {issues.map((issue) => (
-          <div key={issue.personTypeName}>
-            <div className="font-medium">{issue.personTypeName}</div>
-            {issue.missingOpinion.length > 0 && (
-              <div className="ml-3">
-                <div>{issue.missingOpinion.length} missing human opinion:</div>
-                <ul className="ml-4 list-disc">
-                  {issue.missingOpinion.map((name) => <li key={name}>{name}</li>)}
-                </ul>
-              </div>
-            )}
-            {issue.missingAvailability.length > 0 && (
-              <div className="ml-3">
-                <div>{issue.missingAvailability.length} missing timezone & availability:</div>
-                <ul className="ml-4 list-disc">
-                  {issue.missingAvailability.map((name) => <li key={name}>{name}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
+          <ValidationIssueSection key={issue.personTypeName} issue={issue} />
         ))}
       </div>
     </div>
