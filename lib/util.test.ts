@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { WeeklyTime } from 'weekly-availabilities';
+import { Interval, WeeklyTime } from 'weekly-availabilities';
 import { MINUTES_IN_UNIT } from './constants';
-import { toTimeAvUnits } from './util';
+import { collapseAvailabilityToMonday, expandAvailabilityToDays, toTimeAvUnits } from './util';
 
 /** Monday at given hour:minute in weekly minutes */
 function mon(hour: number, minute = 0): WeeklyTime {
@@ -30,5 +30,77 @@ describe('toTimeAvUnits (availability rounding to 30-min boundaries)', () => {
     // Available 9:15 - 9:30 — only 15 minutes, doesn't span a full 30-min block
     const result = toTimeAvUnits([[mon(9, 15), mon(9, 30)]]);
     expect(result).toEqual([]);
+  });
+});
+
+const MINUTES_IN_DAY = 24 * 60;
+
+/** Helper to create an interval on a specific day (0=Mon, 1=Tue, etc.) */
+function dayInterval(day: number, startHour: number, endHour: number, startMin = 0, endMin = 0): Interval {
+  const dayStart = day * MINUTES_IN_DAY;
+  return [dayStart + startHour * 60 + startMin, dayStart + endHour * 60 + endMin] as Interval;
+}
+
+describe('collapseAvailabilityToMonday', () => {
+  test('collapses weekday availability to Monday', () => {
+    // Mon-Fri 9:00-12:00 (same time each day)
+    const intervals: Interval[] = [];
+    for (let day = 0; day < 5; day++) {
+      intervals.push(dayInterval(day, 9, 12));
+    }
+    const result = collapseAvailabilityToMonday(intervals);
+    // Should collapse to a single Monday 9:00-12:00
+    expect(result).toEqual([dayInterval(0, 9, 12)]);
+  });
+
+  test('merges different time windows from different days', () => {
+    // Mon-Fri 9:00-12:00, Sat-Sun 15:00-17:00
+    const intervals: Interval[] = [];
+    for (let day = 0; day < 5; day++) {
+      intervals.push(dayInterval(day, 9, 12));
+    }
+    for (let day = 5; day < 7; day++) {
+      intervals.push(dayInterval(day, 15, 17));
+    }
+    const result = collapseAvailabilityToMonday(intervals);
+    expect(result).toEqual([
+      dayInterval(0, 9, 12),
+      dayInterval(0, 15, 17),
+    ]);
+  });
+
+  test('merges overlapping windows from different days', () => {
+    // Monday 9:00-12:00 and Tuesday 11:00-14:00
+    const intervals: Interval[] = [
+      dayInterval(0, 9, 12),
+      dayInterval(1, 11, 14),
+    ];
+    const result = collapseAvailabilityToMonday(intervals);
+    // Should merge to Monday 9:00-14:00
+    expect(result).toEqual([dayInterval(0, 9, 14)]);
+  });
+
+  test('handles empty input', () => {
+    expect(collapseAvailabilityToMonday([])).toEqual([]);
+  });
+});
+
+describe('expandAvailabilityToDays', () => {
+  test('expands to 5 days', () => {
+    const intervals: Interval[] = [dayInterval(0, 9, 12)];
+    const result = expandAvailabilityToDays(intervals, 5);
+    expect(result).toEqual([
+      dayInterval(0, 9, 12),
+      dayInterval(1, 9, 12),
+      dayInterval(2, 9, 12),
+      dayInterval(3, 9, 12),
+      dayInterval(4, 9, 12),
+    ]);
+  });
+
+  test('expands to 1 day (Monday only)', () => {
+    const intervals: Interval[] = [dayInterval(2, 10, 11)]; // Wednesday 10-11
+    const result = expandAvailabilityToDays(intervals, 1);
+    expect(result).toEqual([dayInterval(0, 10, 11)]);
   });
 });

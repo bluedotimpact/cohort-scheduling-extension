@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Interval, parseIntervals, subtractIntervals, toDate } from "weekly-availabilities";
 import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
 import { Cohort, SchedulerInput, PersonType as SchedulerPersonType, solve } from "../lib/scheduler";
-import { generateDefaultAvailability, toTimeAvUnits, wait } from "../lib/util";
+import { collapseAvailabilityToMonday, generateDefaultAvailability, toTimeAvUnits, wait } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
@@ -333,6 +333,7 @@ const AlgorithmPage = () => {
     const generateGrandInput = async () => {
       try {
         let targetRoundDates: { start: Date; end: Date } | null = null;
+        let isIntensive = false;
         const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!);
         const emailFieldId = getEmailFieldId(cohortsTable!, preset);
 
@@ -383,7 +384,11 @@ const AlgorithmPage = () => {
             const targetRoundId = firstPersonRound?.[0]?.id;
 
             if (targetRoundId) {
-              targetRoundDates = await getTargetRoundDates(base, targetRoundId, cohortsTable, preset);
+              const roundInfo = await getTargetRoundDates(base, targetRoundId, cohortsTable, preset);
+              if (roundInfo) {
+                targetRoundDates = { start: roundInfo.start, end: roundInfo.end };
+                isIntensive = roundInfo.isIntensive;
+              }
             }
           }
 
@@ -402,9 +407,15 @@ const AlgorithmPage = () => {
                     facilitatorEmail,
                     preset,
                     ...(targetRoundDates && { targetRoundDates }),
+                    isCurrentRunIntensive: isIntensive,
                   });
                   timeAvMins = subtractIntervals(timeAvMins, blockedTimes);
                 }
+              }
+
+              // For intensive courses, collapse all availability to Monday
+              if (isIntensive) {
+                timeAvMins = collapseAvailabilityToMonday(timeAvMins);
               }
 
               const timezone = personType.timezoneField
@@ -414,7 +425,11 @@ const AlgorithmPage = () => {
               let finalTimeAvMins = timeAvMins;
               if (!hasAvailability && timezone && !isFacilitator) {
                 try {
-                  finalTimeAvMins = generateDefaultAvailability(timezone);
+                  let defaultAv = generateDefaultAvailability(timezone);
+                  if (isIntensive) {
+                    defaultAv = collapseAvailabilityToMonday(defaultAv);
+                  }
+                  finalTimeAvMins = defaultAv;
                 } catch {
                   // Invalid timezone, leave empty
                 }

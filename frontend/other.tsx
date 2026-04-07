@@ -12,6 +12,7 @@ import {
 import React, { useState } from "react";
 import { Preset } from ".";
 import { format, fromDate, Interval, parseIntervals } from "weekly-availabilities";
+import { collapseAvailabilityToMonday } from "../lib/util";
 
 const OtherPage = () => {
   const globalConfig = useGlobalConfig();
@@ -55,10 +56,12 @@ const OtherPage = () => {
     if (meetingDates.some(v => isNaN(v.getTime()))) {
       return []
     }
+    const linkedRound = cohort.getCellValue(preset.cohortsIterationField!) as Array<{ id: string }> | null;
     return [{
       id: cohort.id,
       name: cohort.name,
       iteration: cohort.getCellValueAsString(preset.cohortsIterationField!),
+      roundId: linkedRound?.[0]?.id,
       timeAv: format(meetingDates.map((d) => fromDate(d)) as Interval),
     }];
   });
@@ -66,6 +69,24 @@ const OtherPage = () => {
   const recalculateOverlap = async () => {
     try {
       setError(undefined);
+
+      // Fetch round intensity info to determine which cohorts are intensive
+      const roundIntensityMap = new Map<string, boolean>();
+      if (preset.cohortsIterationField) {
+        const iterationField = cohortsTable.fields.find((f) => f.id === preset.cohortsIterationField);
+        const roundsTableId = iterationField?.options?.linkedTableId as string | undefined;
+        if (roundsTableId) {
+          const roundsTable = base.getTableByIdIfExists(roundsTableId);
+          if (roundsTable) {
+            const roundRecords = await roundsTable.selectRecordsAsync({ fields: ['Intensity'] });
+            for (const r of roundRecords.records) {
+              roundIntensityMap.set(r.id, r.getCellValueAsString('Intensity') === 'Intensive');
+            }
+            roundRecords.unloadData();
+          }
+        }
+      }
+
       for (const personType of configuredPersonTypes) {
         console.log("updating", personType.name);
 
@@ -87,7 +108,10 @@ const OtherPage = () => {
               fields[personType.cohortOverlapFullField] = iterationCohorts
                 .filter((cohort) => {
                   const [mb, me] = parseIntervals(cohort.timeAv)[0]!;
-                  return personTimeAv.some(([b, e]) => mb >= b && me <= e);
+                  // For intensive cohorts, collapse person availability to Monday for comparison
+                  const isIntensive = cohort.roundId ? roundIntensityMap.get(cohort.roundId) : false;
+                  const effectiveAv = isIntensive ? collapseAvailabilityToMonday(personTimeAv) : personTimeAv;
+                  return effectiveAv.some(([b, e]) => mb >= b && me <= e);
                 })
                 .map(({ id }) => ({ id }));
             }
@@ -96,7 +120,9 @@ const OtherPage = () => {
               fields[personType.cohortOverlapPartialField] = iterationCohorts
                 .filter((cohort) => {
                   const [mb, me] = parseIntervals(cohort.timeAv)[0]!;
-                  return personTimeAv.some(
+                  const isIntensive = cohort.roundId ? roundIntensityMap.get(cohort.roundId) : false;
+                  const effectiveAv = isIntensive ? collapseAvailabilityToMonday(personTimeAv) : personTimeAv;
+                  return effectiveAv.some(
                     ([b, e]) => (mb >= b && mb < e) || (me > b && me <= e)
                   );
                 })

@@ -81,30 +81,45 @@ export function generateDefaultAvailability(timezone: string): Interval[] {
 }
 
 /**
+ * Extracts unique time-of-day windows from availability intervals.
+ * Returns [startMinuteInDay, endMinuteInDay] pairs, clamped to a single day.
+ */
+function extractTimeOfDayWindows(timeAvMins: Interval[]): [number, number][] {
+  const MINUTES_IN_DAY = 24 * 60;
+  const windows: [number, number][] = [];
+  for (const [start, end] of timeAvMins) {
+    const startOfDay = start % MINUTES_IN_DAY;
+    const endOfDay = startOfDay + (end - start);
+    const isDuplicate = windows.some(
+      ([s, e]) => s === startOfDay && e === endOfDay
+    );
+    if (!isDuplicate) {
+      windows.push([startOfDay, Math.min(endOfDay, MINUTES_IN_DAY)]);
+    }
+  }
+  return windows;
+}
+
+/**
  * Expands a person's availability to all 7 days of the week.
  * Extracts time-of-day windows (ignoring which day) and replicates across Mon-Sun.
  * E.g., [Monday 13:00-15:00] → [Mon 13:00-15:00, Tue 13:00-15:00, ..., Sun 13:00-15:00]
  */
 export function expandAvailability(timeAvMins: Interval[]): Interval[] {
+  return expandAvailabilityToDays(timeAvMins, 7);
+}
+
+/**
+ * Expands a person's availability to the first N days of the week.
+ * Extracts time-of-day windows (ignoring which day) and replicates across days 0..numDays-1.
+ * E.g., with numDays=5: [Monday 13:00-15:00] → [Mon-Fri 13:00-15:00]
+ */
+export function expandAvailabilityToDays(timeAvMins: Interval[], numDays: number): Interval[] {
   const MINUTES_IN_DAY = 24 * 60;
+  const timeOfDayWindows = extractTimeOfDayWindows(timeAvMins);
 
-  // Extract unique time-of-day windows
-  const timeOfDayWindows: [number, number][] = [];
-  for (const [start, end] of timeAvMins) {
-    const startOfDay = start % MINUTES_IN_DAY;
-    const endOfDay = startOfDay + (end - start);
-    // Only add if this time-of-day window isn't already captured
-    const isDuplicate = timeOfDayWindows.some(
-      ([s, e]) => s === startOfDay && e === endOfDay
-    );
-    if (!isDuplicate) {
-      timeOfDayWindows.push([startOfDay, Math.min(endOfDay, MINUTES_IN_DAY)]);
-    }
-  }
-
-  // Replicate across all 7 days
   const expanded: Interval[] = [];
-  for (let day = 0; day < 7; day++) {
+  for (let day = 0; day < numDays; day++) {
     const dayStart = day * MINUTES_IN_DAY;
     for (const [todStart, todEnd] of timeOfDayWindows) {
       const start = dayStart + todStart;
@@ -115,4 +130,32 @@ export function expandAvailability(timeAvMins: Interval[]): Interval[] {
     }
   }
   return expanded;
+}
+
+/**
+ * Collapses availability from all days onto Monday by extracting time-of-day windows
+ * and merging them onto day 0. Used for intensive courses where scheduling is per-day.
+ * E.g., Mon-Fri 9:00-12:00 + Sat-Sun 15:00-17:00 → Monday: 9:00-12:00, 15:00-17:00
+ */
+export function collapseAvailabilityToMonday(timeAvMins: Interval[]): Interval[] {
+  const timeOfDayWindows = extractTimeOfDayWindows(timeAvMins);
+
+  // Sort by start time
+  timeOfDayWindows.sort((a, b) => a[0] - b[0]);
+
+  // Merge overlapping/adjacent intervals
+  const merged: Interval[] = [];
+  for (const [start, end] of timeOfDayWindows) {
+    if (merged.length > 0) {
+      const last = merged[merged.length - 1]!;
+      if (start <= last[1]) {
+        // Overlapping or adjacent — extend
+        merged[merged.length - 1] = [last[0], Math.max(last[1], end)] as Interval;
+        continue;
+      }
+    }
+    merged.push([start, end] as Interval);
+  }
+
+  return merged;
 }
