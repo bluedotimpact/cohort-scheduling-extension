@@ -53,7 +53,10 @@ export function getDistanceUnits(timeAvUnits: [number, number][], t: number, mee
  * Returns Interval[] in weekly minutes, same format as parseIntervals().
  * Minutes in a week: Mon=0-1440, Tue=1440-2880, ..., Fri=5760-7200
  */
-export function generateDefaultAvailability(timezone: string): Interval[] {
+/**
+ * Converts an IANA timezone string to synthetic availability representing 9am-9pm for the given days.
+ */
+function generateDefaultAvailabilityForDays(timezone: string, numDays: number): Interval[] {
   // Get UTC offset for this timezone
   const now = new Date();
   const utcString = now.toLocaleString('en-US', { timeZone: 'UTC' });
@@ -63,14 +66,10 @@ export function generateDefaultAvailability(timezone: string): Interval[] {
   const offsetMinutes = (tzDate.getTime() - utcDate.getTime()) / 60000;
 
   const intervals: Interval[] = [];
-  // Mon-Fri (days 0-4), 9am-9pm local = 540-1260 minutes into the day
-  for (let day = 0; day < 5; day++) {
+  for (let day = 0; day < numDays; day++) {
     const dayStartMinutes = day * 24 * 60;
-    // Convert local times to the weekly-minutes reference frame
-    // The reference frame is assumed to be UTC, so we subtract the offset
     const start = dayStartMinutes + 9 * 60 - offsetMinutes;
     const end = dayStartMinutes + 21 * 60 - offsetMinutes;
-    // Clamp to valid week range [0, 10080]
     const clampedStart = Math.max(0, Math.min(10080, start));
     const clampedEnd = Math.max(0, Math.min(10080, end));
     if (clampedEnd > clampedStart) {
@@ -78,6 +77,21 @@ export function generateDefaultAvailability(timezone: string): Interval[] {
     }
   }
   return intervals;
+}
+
+/**
+ * Converts an IANA timezone string to synthetic availability representing 9am-9pm Mon-Fri.
+ */
+export function generateDefaultAvailability(timezone: string): Interval[] {
+  return generateDefaultAvailabilityForDays(timezone, 5);
+}
+
+/**
+ * Converts an IANA timezone string to synthetic availability representing 9am-9pm all 7 days.
+ * Used for intensive courses where participants may be available on any day.
+ */
+export function generateDefaultAvailabilityAllDays(timezone: string): Interval[] {
+  return generateDefaultAvailabilityForDays(timezone, 7);
 }
 
 /**

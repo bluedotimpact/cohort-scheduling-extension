@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Interval, parseIntervals, subtractIntervals, toDate } from "weekly-availabilities";
 import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
 import { Cohort, SchedulerInput, PersonType as SchedulerPersonType, solve } from "../lib/scheduler";
-import { collapseAvailabilityToMonday, generateDefaultAvailability, toTimeAvUnits, wait } from "../lib/util";
+import { collapseAvailabilityToMonday, expandAvailability, generateDefaultAvailability, generateDefaultAvailabilityAllDays, toTimeAvUnits, wait } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
@@ -413,9 +413,11 @@ const AlgorithmPage = () => {
                 }
               }
 
-              // For intensive courses, collapse all availability to Monday
+              // For intensive courses, expand availability to all 7 days first
+              // (so weekend-only availability gets replicated to weekdays),
+              // then collapse everything to Monday
               if (isIntensive) {
-                timeAvMins = collapseAvailabilityToMonday(timeAvMins);
+                timeAvMins = collapseAvailabilityToMonday(expandAvailability(timeAvMins));
               }
 
               const timezone = personType.timezoneField
@@ -425,11 +427,13 @@ const AlgorithmPage = () => {
               let finalTimeAvMins = timeAvMins;
               if (!hasAvailability && timezone && !isFacilitator) {
                 try {
-                  let defaultAv = generateDefaultAvailability(timezone);
+                  // For intensives, generate 9am-9pm for all 7 days then collapse
+                  // (vs Mon-Fri only for part-time)
                   if (isIntensive) {
-                    defaultAv = collapseAvailabilityToMonday(defaultAv);
+                    finalTimeAvMins = collapseAvailabilityToMonday(generateDefaultAvailabilityAllDays(timezone));
+                  } else {
+                    finalTimeAvMins = generateDefaultAvailability(timezone);
                   }
-                  finalTimeAvMins = defaultAv;
                 } catch {
                   // Invalid timezone, leave empty
                 }
