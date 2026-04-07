@@ -38,8 +38,11 @@ export async function getFacilitatorBlockedTimes({
   }
 
   // Fetch rounds and cohorts in parallel
+  const roundFields = ['Status', ROUND_START_DATE_FIELD_NAME, ROUND_END_DATE_FIELD_NAME];
+  if (preset.roundsIntensityField) roundFields.push(preset.roundsIntensityField);
+  if (preset.roundsNumUnitsField) roundFields.push(preset.roundsNumUnitsField);
   const [roundRecords, cohortRecords] = await Promise.all([
-    roundsTable.selectRecordsAsync({ fields: ['Status', ROUND_START_DATE_FIELD_NAME, ROUND_END_DATE_FIELD_NAME, 'Intensity', 'Num units'] }),
+    roundsTable.selectRecordsAsync({ fields: roundFields }),
     cohortsTable.selectRecordsAsync({
       fields: [
         preset.cohortsTableStartDateField!,
@@ -58,9 +61,9 @@ export async function getFacilitatorBlockedTimes({
     const startDate = new Date(r.getCellValue(ROUND_START_DATE_FIELD_NAME) as string);
     const endDate = new Date(r.getCellValue(ROUND_END_DATE_FIELD_NAME) as string);
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) continue;
-    const intensity = r.getCellValueAsString('Intensity');
+    const intensity = preset.roundsIntensityField ? r.getCellValueAsString(preset.roundsIntensityField) : '';
     const isIntensive = intensity === 'Intensive';
-    const numUnits = parseInt(r.getCellValueAsString('Num units')) || 0;
+    const numUnits = preset.roundsNumUnitsField ? parseInt(r.getCellValueAsString(preset.roundsNumUnitsField)) || 0 : 0;
     roundInfo.set(r.id, { startDate, endDate, isIntensive, numUnits });
   }
   roundRecords.unloadData();
@@ -146,8 +149,11 @@ export async function getTargetRoundDates(
   const roundsTable = getRoundsTable(base, cohortsTable, preset);
   if (!roundsTable) return null;
 
+  const roundFields = [ROUND_START_DATE_FIELD_NAME, ROUND_END_DATE_FIELD_NAME];
+  if (preset.roundsIntensityField) roundFields.push(preset.roundsIntensityField);
+  if (preset.roundsNumUnitsField) roundFields.push(preset.roundsNumUnitsField);
   const roundsData = await roundsTable.selectRecordsAsync({
-    fields: [ROUND_START_DATE_FIELD_NAME, ROUND_END_DATE_FIELD_NAME, 'Intensity', 'Num units'],
+    fields: roundFields,
   });
 
   const record = roundsData.records.find((r) => r.id === targetRoundId);
@@ -159,9 +165,9 @@ export async function getTargetRoundDates(
   const end = new Date(record.getCellValue(ROUND_END_DATE_FIELD_NAME) as string);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
 
-  const intensity = record.getCellValueAsString('Intensity');
+  const intensity = preset.roundsIntensityField ? record.getCellValueAsString(preset.roundsIntensityField) : '';
   const isIntensive = intensity === 'Intensive';
-  const numUnits = parseInt(record.getCellValueAsString('Num units')) || 0;
+  const numUnits = preset.roundsNumUnitsField ? parseInt(record.getCellValueAsString(preset.roundsNumUnitsField)) || 0 : 0;
 
   return { start, end, isIntensive, numUnits };
 }

@@ -33,6 +33,8 @@ export type Preset = {
   cohortsIterationField?: string;
   cohortsBucketField?: string;
   facilitatorEmailLookupField?: string;
+  roundsIntensityField?: string;
+  roundsNumUnitsField?: string;
 };
 
 const createPreset = (name: string) => ({

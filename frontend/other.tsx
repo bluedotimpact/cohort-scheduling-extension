@@ -72,15 +72,15 @@ const OtherPage = () => {
 
       // Fetch round intensity info to determine which cohorts are intensive
       const roundIntensityMap = new Map<string, boolean>();
-      if (preset.cohortsIterationField) {
+      if (preset.cohortsIterationField && preset.roundsIntensityField) {
         const iterationField = cohortsTable.fields.find((f) => f.id === preset.cohortsIterationField);
         const roundsTableId = iterationField?.options?.linkedTableId as string | undefined;
         if (roundsTableId) {
           const roundsTable = base.getTableByIdIfExists(roundsTableId);
           if (roundsTable) {
-            const roundRecords = await roundsTable.selectRecordsAsync({ fields: ['Intensity'] });
+            const roundRecords = await roundsTable.selectRecordsAsync({ fields: [preset.roundsIntensityField] });
             for (const r of roundRecords.records) {
-              roundIntensityMap.set(r.id, r.getCellValueAsString('Intensity') === 'Intensive');
+              roundIntensityMap.set(r.id, r.getCellValueAsString(preset.roundsIntensityField!) === 'Intensive');
             }
             roundRecords.unloadData();
           }

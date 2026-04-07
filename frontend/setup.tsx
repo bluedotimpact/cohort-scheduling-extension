@@ -362,6 +362,14 @@ const SetupPage = () => {
     globalConfig.get([...path, "cohortsTable"]) as string
   );
 
+  // Resolve the Rounds table via the iteration field's linked table
+  const roundsTable = useMemo(() => {
+    if (!cohortsTable || !preset.cohortsIterationField) return null;
+    const iterationField = cohortsTable.fields.find((f) => f.id === preset.cohortsIterationField);
+    const roundsTableId = iterationField?.options?.linkedTableId as string | undefined;
+    return roundsTableId ? base.getTableByIdIfExists(roundsTableId) : null;
+  }, [base, cohortsTable, preset.cohortsIterationField]);
+
   const cohortsTableConfigured =
     preset.cohortsTable &&
     preset.cohortsTableStartDateField &&
@@ -472,6 +480,24 @@ const SetupPage = () => {
                   table={cohortsTable}
                   allowedTypes={[FieldType.MULTIPLE_LOOKUP_VALUES]}
                   globalConfigKey={[...path, "facilitatorEmailLookupField"]}
+                />
+              </FormField>
+            </div>
+          )}
+          {roundsTable && (
+            <div className="grid sm:grid-cols-2 gap-1 mt-2">
+              <FormField label="Rounds: Intensity field">
+                <FieldPickerSynced
+                  table={roundsTable}
+                  allowedTypes={[FieldType.SINGLE_SELECT]}
+                  globalConfigKey={[...path, "roundsIntensityField"]}
+                />
+              </FormField>
+              <FormField label="Rounds: Num units field">
+                <FieldPickerSynced
+                  table={roundsTable}
+                  allowedTypes={[FieldType.NUMBER, FieldType.MULTIPLE_LOOKUP_VALUES]}
+                  globalConfigKey={[...path, "roundsNumUnitsField"]}
                 />
               </FormField>
             </div>
