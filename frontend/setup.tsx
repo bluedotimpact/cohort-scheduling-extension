@@ -16,6 +16,7 @@ import {
   ViewPickerSynced
 } from "@airtable/blocks/ui";
 import { FieldType } from "@airtable/blocks/models";
+import { Disclosure, Transition } from "@headlessui/react";
 import React, { useMemo, useState } from "react";
 import { Preset } from ".";
 import { MS_IN_WEEK, MINUTES_IN_UNIT } from "../lib/constants";
@@ -424,106 +425,143 @@ const SetupPage = () => {
             </FormField>
           </div>
         </div>
-        <div>
-          <div className="flex space-x-2 items-center">
-            <Heading>Cohorts table</Heading>
-            {!cohortsTableConfigured && (
-              <span className="text-xs text-gray-500">
-                Please finish configuring the cohorts table
-              </span>
+        <Disclosure defaultOpen={!cohortsTableConfigured}>
+          {({ open }) => (
+            <div>
+              <Disclosure.Button className="flex space-x-2 items-center w-full">
+                <Icon name="caret" className={"transition-all " + (open ? "" : "-rotate-90")} size={12} />
+                <Heading>Cohorts table</Heading>
+                {!cohortsTableConfigured && (
+                  <span className="text-xs text-gray-500">
+                    Please finish configuring the cohorts table
+                  </span>
+                )}
+              </Disclosure.Button>
+              <Transition
+                enter="transition duration-100 ease-out"
+                enterFrom="transform opacity-0"
+                enterTo="transform opacity-100"
+                leave="transition duration-75 ease-out"
+                leaveFrom="transform opacity-100"
+                leaveTo="transform opacity-0"
+              >
+                <Disclosure.Panel className="pl-4">
+                  <FormField label="Cohorts table">
+                    <TablePickerSynced
+                      globalConfigKey={[...path, "cohortsTable"]}
+                      onChange={() => {
+                        globalConfig.setPathsAsync([
+                          { path: [...path, "cohortsTableStartDateField"], value: null },
+                          { path: [...path, "cohortsTableEndDateField"], value: null },
+                          { path: [...path, "cohortsIterationField"], value: null },
+                        ]);
+                      }}
+                    />
+                  </FormField>
+                  {cohortsTable && (
+                    <div className="grid sm:grid-cols-2 gap-1">
+                      <FormField label="First session start time field">
+                        <FieldPickerSynced
+                          table={cohortsTable}
+                          allowedTypes={[FieldType.DATE_TIME]}
+                          globalConfigKey={[...path, "cohortsTableStartDateField"]}
+                        />
+                      </FormField>
+                      <FormField label="First session end time field">
+                        <FieldPickerSynced
+                          table={cohortsTable}
+                          allowedTypes={[FieldType.DATE_TIME]}
+                          globalConfigKey={[...path, "cohortsTableEndDateField"]}
+                        />
+                      </FormField>
+                      <FormField label="Iteration field">
+                        <FieldPickerSynced
+                          table={cohortsTable}
+                          allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
+                          globalConfigKey={[...path, "cohortsIterationField"]}
+                        />
+                      </FormField>
+                      <FormField label="Bucket field">
+                        <FieldPickerSynced
+                          table={cohortsTable}
+                          allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS, FieldType.MULTIPLE_LOOKUP_VALUES]}
+                          globalConfigKey={[...path, "cohortsBucketField"]}
+                        />
+                      </FormField>
+                      <FormField label="Facilitator email lookup field">
+                        <FieldPickerSynced
+                          table={cohortsTable}
+                          allowedTypes={[FieldType.MULTIPLE_LOOKUP_VALUES]}
+                          globalConfigKey={[...path, "facilitatorEmailLookupField"]}
+                        />
+                      </FormField>
+                    </div>
+                  )}
+                </Disclosure.Panel>
+              </Transition>
+            </div>
+          )}
+        </Disclosure>
+        {roundsTable && (
+          <Disclosure>
+            {({ open }) => (
+              <div>
+                <Disclosure.Button className="flex space-x-2 items-center w-full">
+                  <Icon name="caret" className={"transition-all " + (open ? "" : "-rotate-90")} size={12} />
+                  <Heading>Rounds table</Heading>
+                </Disclosure.Button>
+                <Transition
+                  enter="transition duration-100 ease-out"
+                  enterFrom="transform opacity-0"
+                  enterTo="transform opacity-100"
+                  leave="transition duration-75 ease-out"
+                  leaveFrom="transform opacity-100"
+                  leaveTo="transform opacity-0"
+                >
+                  <Disclosure.Panel className="pl-4">
+                    <div className="grid sm:grid-cols-2 gap-1">
+                      <FormField label="Status field">
+                        <FieldPickerSynced
+                          table={roundsTable}
+                          allowedTypes={[FieldType.SINGLE_SELECT, FieldType.SINGLE_LINE_TEXT]}
+                          globalConfigKey={[...path, "roundsStatusField"]}
+                        />
+                      </FormField>
+                      <FormField label="Start date field">
+                        <FieldPickerSynced
+                          table={roundsTable}
+                          allowedTypes={[FieldType.DATE_TIME, FieldType.DATE]}
+                          globalConfigKey={[...path, "roundsStartDateField"]}
+                        />
+                      </FormField>
+                      <FormField label="End date field">
+                        <FieldPickerSynced
+                          table={roundsTable}
+                          allowedTypes={[FieldType.DATE_TIME, FieldType.DATE]}
+                          globalConfigKey={[...path, "roundsEndDateField"]}
+                        />
+                      </FormField>
+                      <FormField label="Intensity field">
+                        <FieldPickerSynced
+                          table={roundsTable}
+                          allowedTypes={[FieldType.SINGLE_SELECT]}
+                          globalConfigKey={[...path, "roundsIntensityField"]}
+                        />
+                      </FormField>
+                      <FormField label="Num units field">
+                        <FieldPickerSynced
+                          table={roundsTable}
+                          allowedTypes={[FieldType.NUMBER, FieldType.MULTIPLE_LOOKUP_VALUES]}
+                          globalConfigKey={[...path, "roundsNumUnitsField"]}
+                        />
+                      </FormField>
+                    </div>
+                  </Disclosure.Panel>
+                </Transition>
+              </div>
             )}
-          </div>
-          <FormField label="Cohorts table">
-            <TablePickerSynced
-              globalConfigKey={[...path, "cohortsTable"]}
-              onChange={() => {
-                globalConfig.setPathsAsync([
-                  { path: [...path, "cohortsTableStartDateField"], value: null },
-                  { path: [...path, "cohortsTableEndDateField"], value: null },
-                  { path: [...path, "cohortsIterationField"], value: null },
-                ]);
-              }}
-            />
-          </FormField>
-          {cohortsTable && (
-            <div className="grid sm:grid-cols-2 gap-1">
-              <FormField label="First session start time field">
-                <FieldPickerSynced
-                  table={cohortsTable}
-                  allowedTypes={[FieldType.DATE_TIME]}
-                  globalConfigKey={[...path, "cohortsTableStartDateField"]}
-                />
-              </FormField>
-              <FormField label="First session end time field">
-                <FieldPickerSynced
-                  table={cohortsTable}
-                  allowedTypes={[FieldType.DATE_TIME]}
-                  globalConfigKey={[...path, "cohortsTableEndDateField"]}
-                />
-              </FormField>
-              <FormField label="Iteration field">
-                <FieldPickerSynced
-                  table={cohortsTable}
-                  allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
-                  globalConfigKey={[...path, "cohortsIterationField"]}
-                />
-              </FormField>
-              <FormField label="Bucket field">
-                <FieldPickerSynced
-                  table={cohortsTable}
-                  allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS, FieldType.MULTIPLE_LOOKUP_VALUES]}
-                  globalConfigKey={[...path, "cohortsBucketField"]}
-                />
-              </FormField>
-              <FormField label="Facilitator email lookup field">
-                <FieldPickerSynced
-                  table={cohortsTable}
-                  allowedTypes={[FieldType.MULTIPLE_LOOKUP_VALUES]}
-                  globalConfigKey={[...path, "facilitatorEmailLookupField"]}
-                />
-              </FormField>
-            </div>
-          )}
-          {roundsTable && (
-            <div className="grid sm:grid-cols-2 gap-1 mt-2">
-              <FormField label="Rounds: Status field">
-                <FieldPickerSynced
-                  table={roundsTable}
-                  allowedTypes={[FieldType.SINGLE_SELECT, FieldType.SINGLE_LINE_TEXT]}
-                  globalConfigKey={[...path, "roundsStatusField"]}
-                />
-              </FormField>
-              <FormField label="Rounds: Start date field">
-                <FieldPickerSynced
-                  table={roundsTable}
-                  allowedTypes={[FieldType.DATE_TIME, FieldType.DATE]}
-                  globalConfigKey={[...path, "roundsStartDateField"]}
-                />
-              </FormField>
-              <FormField label="Rounds: End date field">
-                <FieldPickerSynced
-                  table={roundsTable}
-                  allowedTypes={[FieldType.DATE_TIME, FieldType.DATE]}
-                  globalConfigKey={[...path, "roundsEndDateField"]}
-                />
-              </FormField>
-              <FormField label="Rounds: Intensity field">
-                <FieldPickerSynced
-                  table={roundsTable}
-                  allowedTypes={[FieldType.SINGLE_SELECT]}
-                  globalConfigKey={[...path, "roundsIntensityField"]}
-                />
-              </FormField>
-              <FormField label="Rounds: Num units field">
-                <FieldPickerSynced
-                  table={roundsTable}
-                  allowedTypes={[FieldType.NUMBER, FieldType.MULTIPLE_LOOKUP_VALUES]}
-                  globalConfigKey={[...path, "roundsNumUnitsField"]}
-                />
-              </FormField>
-            </div>
-          )}
-        </div>
+          </Disclosure>
+        )}
         <div>
           <div className="flex space-x-2 items-center">
             <Heading>Person types</Heading>
