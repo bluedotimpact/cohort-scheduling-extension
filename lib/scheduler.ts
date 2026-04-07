@@ -6,6 +6,7 @@ import { getOverlapUnits, expandAvailability, toTimeAvUnits, generateDefaultAvai
 export interface SchedulerInput {
   lengthOfMeetingMins: number,
   personTypes: PersonType[],
+  isIntensive?: boolean,
 }
 
 export interface PersonType {
@@ -403,7 +404,7 @@ function computeMajorityRank(
 }
 
 // See https://www.notion.so/bluedot-impact/Cohort-scheduling-algorithm-5aea0c98fcbe4ddfac3321cd1afd56c3#e9efb553c9b3499e9669f08cda7dd322
-export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput): Promise<null | Cohort[]> {
+export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: SchedulerInput): Promise<null | Cohort[]> {
   const lengthOfMeetingInUnits = lengthOfMeetingMins / MINUTES_IN_UNIT;
 
   const personTypeNames = new Set();
@@ -1262,8 +1263,10 @@ export async function solve({ lengthOfMeetingMins, personTypes }: SchedulerInput
     }
   }
 
-  // ── Spread groups across days ──
-  spreadGroupsAcrossDays(allCohorts, personById, lengthOfMeetingInUnits, allTimeSlots, participantType.name);
+  // ── Spread groups across days (skip for intensive courses — all groups stay on Monday) ──
+  if (!isIntensive) {
+    spreadGroupsAcrossDays(allCohorts, personById, lengthOfMeetingInUnits, allTimeSlots, participantType.name);
+  }
 
   return allCohorts;
 }

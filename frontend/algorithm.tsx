@@ -487,6 +487,7 @@ const AlgorithmPage = () => {
         setGrandInput({
           lengthOfMeetingMins: preset.lengthOfMeeting,
           personTypes,
+          isIntensive,
         });
       } catch (err) {
         console.error(err);
