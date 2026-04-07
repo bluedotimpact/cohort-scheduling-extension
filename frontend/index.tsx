@@ -33,6 +33,9 @@ export type Preset = {
   cohortsIterationField?: string;
   cohortsBucketField?: string;
   facilitatorEmailLookupField?: string;
+  roundsStatusField?: string;
+  roundsStartDateField?: string;
+  roundsEndDateField?: string;
   roundsIntensityField?: string;
   roundsNumUnitsField?: string;
 };

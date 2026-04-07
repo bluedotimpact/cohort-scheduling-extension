@@ -486,6 +486,27 @@ const SetupPage = () => {
           )}
           {roundsTable && (
             <div className="grid sm:grid-cols-2 gap-1 mt-2">
+              <FormField label="Rounds: Status field">
+                <FieldPickerSynced
+                  table={roundsTable}
+                  allowedTypes={[FieldType.SINGLE_SELECT, FieldType.SINGLE_LINE_TEXT]}
+                  globalConfigKey={[...path, "roundsStatusField"]}
+                />
+              </FormField>
+              <FormField label="Rounds: Start date field">
+                <FieldPickerSynced
+                  table={roundsTable}
+                  allowedTypes={[FieldType.DATE_TIME, FieldType.DATE]}
+                  globalConfigKey={[...path, "roundsStartDateField"]}
+                />
+              </FormField>
+              <FormField label="Rounds: End date field">
+                <FieldPickerSynced
+                  table={roundsTable}
+                  allowedTypes={[FieldType.DATE_TIME, FieldType.DATE]}
+                  globalConfigKey={[...path, "roundsEndDateField"]}
+                />
+              </FormField>
               <FormField label="Rounds: Intensity field">
                 <FieldPickerSynced
                   table={roundsTable}

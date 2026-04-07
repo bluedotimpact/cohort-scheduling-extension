@@ -1,7 +1,6 @@
 import type { Base, Table } from '@airtable/blocks/models';
 import { fromDate, Interval } from 'weekly-availabilities';
 import type { Preset } from '../frontend';
-import { ROUND_END_DATE_FIELD_NAME, ROUND_START_DATE_FIELD_NAME } from './constants';
 import { collapseAvailabilityToMonday, dateRangesOverlap, expandAvailabilityToDays } from './util';
 
 /** Facilitators can facilitate multiple rounds simultaneously. We want to avoid scheduling a facilitator at a time they
@@ -37,8 +36,12 @@ export async function getFacilitatorBlockedTimes({
     throw new Error('Could not find rounds table');
   }
 
+  if (!preset.roundsStatusField || !preset.roundsStartDateField || !preset.roundsEndDateField) {
+    return [];
+  }
+
   // Fetch rounds and cohorts in parallel
-  const roundFields = ['Status', ROUND_START_DATE_FIELD_NAME, ROUND_END_DATE_FIELD_NAME];
+  const roundFields = [preset.roundsStatusField, preset.roundsStartDateField, preset.roundsEndDateField];
   if (preset.roundsIntensityField) roundFields.push(preset.roundsIntensityField);
   if (preset.roundsNumUnitsField) roundFields.push(preset.roundsNumUnitsField);
   const [roundRecords, cohortRecords] = await Promise.all([
@@ -56,10 +59,10 @@ export async function getFacilitatorBlockedTimes({
   // Build map of active round IDs -> { startDate, endDate, isIntensive, numUnits }
   const roundInfo = new Map<string, { startDate: Date; endDate: Date; isIntensive: boolean; numUnits: number }>();
   for (const r of roundRecords.records) {
-    const isActive = r.getCellValueAsString('Status') === 'Active';
+    const isActive = r.getCellValueAsString(preset.roundsStatusField!) === 'Active';
     if (!isActive) continue;
-    const startDate = new Date(r.getCellValue(ROUND_START_DATE_FIELD_NAME) as string);
-    const endDate = new Date(r.getCellValue(ROUND_END_DATE_FIELD_NAME) as string);
+    const startDate = new Date(r.getCellValue(preset.roundsStartDateField!) as string);
+    const endDate = new Date(r.getCellValue(preset.roundsEndDateField!) as string);
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) continue;
     const intensity = preset.roundsIntensityField ? r.getCellValueAsString(preset.roundsIntensityField) : '';
     const isIntensive = intensity === 'Intensive';
@@ -149,7 +152,9 @@ export async function getTargetRoundDates(
   const roundsTable = getRoundsTable(base, cohortsTable, preset);
   if (!roundsTable) return null;
 
-  const roundFields = [ROUND_START_DATE_FIELD_NAME, ROUND_END_DATE_FIELD_NAME];
+  if (!preset.roundsStartDateField || !preset.roundsEndDateField) return null;
+
+  const roundFields = [preset.roundsStartDateField, preset.roundsEndDateField];
   if (preset.roundsIntensityField) roundFields.push(preset.roundsIntensityField);
   if (preset.roundsNumUnitsField) roundFields.push(preset.roundsNumUnitsField);
   const roundsData = await roundsTable.selectRecordsAsync({
@@ -161,8 +166,8 @@ export async function getTargetRoundDates(
 
   if (!record) return null;
 
-  const start = new Date(record.getCellValue(ROUND_START_DATE_FIELD_NAME) as string);
-  const end = new Date(record.getCellValue(ROUND_END_DATE_FIELD_NAME) as string);
+  const start = new Date(record.getCellValue(preset.roundsStartDateField) as string);
+  const end = new Date(record.getCellValue(preset.roundsEndDateField) as string);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
 
   const intensity = preset.roundsIntensityField ? record.getCellValueAsString(preset.roundsIntensityField) : '';
