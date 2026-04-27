@@ -49,21 +49,37 @@ export function getDistanceUnits(timeAvUnits: [number, number][], t: number, mee
 }
 
 /**
- * Converts an IANA timezone string to synthetic availability representing 9am-9pm Mon-Fri.
- * Returns Interval[] in weekly minutes, same format as parseIntervals().
- * Minutes in a week: Mon=0-1440, Tue=1440-2880, ..., Fri=5760-7200
+ * Parses a `UTC±HH:MM` offset string (e.g. "UTC+01:00", "UTC-05:30", "UTC00:00")
+ * to minutes east of UTC. Returns null if the string is not in this format.
  */
+function parseUtcOffsetMinutes(timezone: string): number | null {
+  if (timezone === 'UTC' || timezone === 'UTC00:00') return 0;
+  const match = /^UTC([+-])(\d{2}):(\d{2})$/.exec(timezone);
+  if (!match) return null;
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = parseInt(match[2]!, 10);
+  const minutes = parseInt(match[3]!, 10);
+  return sign * (hours * 60 + minutes);
+}
+
 /**
- * Converts an IANA timezone string to synthetic availability representing 9am-9pm for the given days.
+ * Converts a timezone string to synthetic availability representing 9am-9pm for the given days.
+ * Accepts both IANA names (e.g. "Europe/London") and `UTC±HH:MM` offsets (e.g. "UTC+01:00").
+ * Returns Interval[] in weekly minutes, same format as parseIntervals().
  */
 function generateDefaultAvailabilityForDays(timezone: string, numDays: number): Interval[] {
-  // Get UTC offset for this timezone
-  const now = new Date();
-  const utcString = now.toLocaleString('en-US', { timeZone: 'UTC' });
-  const tzString = now.toLocaleString('en-US', { timeZone: timezone });
-  const utcDate = new Date(utcString);
-  const tzDate = new Date(tzString);
-  const offsetMinutes = (tzDate.getTime() - utcDate.getTime()) / 60000;
+  // Try the `UTC±HH:MM` offset format first (this is what the BlueDot availability app stores).
+  let offsetMinutes = parseUtcOffsetMinutes(timezone);
+
+  if (offsetMinutes === null) {
+    // Fall back to IANA names via Intl.
+    const now = new Date();
+    const utcString = now.toLocaleString('en-US', { timeZone: 'UTC' });
+    const tzString = now.toLocaleString('en-US', { timeZone: timezone });
+    const utcDate = new Date(utcString);
+    const tzDate = new Date(tzString);
+    offsetMinutes = (tzDate.getTime() - utcDate.getTime()) / 60000;
+  }
 
   const intervals: Interval[] = [];
   for (let day = 0; day < numDays; day++) {

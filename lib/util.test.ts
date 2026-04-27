@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { Interval, WeeklyTime } from 'weekly-availabilities';
 import { MINUTES_IN_UNIT } from './constants';
-import { collapseAvailabilityToMonday, expandAvailabilityToDays, toTimeAvUnits } from './util';
+import { collapseAvailabilityToMonday, expandAvailabilityToDays, generateDefaultAvailability, toTimeAvUnits } from './util';
 
 /** Monday at given hour:minute in weekly minutes */
 function mon(hour: number, minute = 0): WeeklyTime {
@@ -82,6 +82,49 @@ describe('collapseAvailabilityToMonday', () => {
 
   test('handles empty input', () => {
     expect(collapseAvailabilityToMonday([])).toEqual([]);
+  });
+});
+
+describe('generateDefaultAvailability', () => {
+  test('UTC+01:00 produces 9am-9pm Mon-Fri shifted -1h to UTC', () => {
+    // 9am-9pm local in UTC+01:00 is 8am-8pm UTC.
+    const result = generateDefaultAvailability('UTC+01:00');
+    expect(result).toEqual([
+      dayInterval(0, 8, 20),
+      dayInterval(1, 8, 20),
+      dayInterval(2, 8, 20),
+      dayInterval(3, 8, 20),
+      dayInterval(4, 8, 20),
+    ]);
+  });
+
+  test('UTC+10:00 produces 9am-9pm Mon-Fri shifted -10h to UTC (clamped at week start)', () => {
+    // 9am Mon local in UTC+10:00 is 23:00 Sunday UTC, clamped to start of week.
+    // 9pm Fri local is 11:00 Fri UTC.
+    const result = generateDefaultAvailability('UTC+10:00');
+    // Mon: clamped to [0, 660] (starts at 0 because -180min would be Sunday)
+    // Tue-Fri: [day*1440 - 60, day*1440 + 660] (e.g. Tue 23:00-Tue 11:00 next day = no, recompute)
+    // Actually start = day*1440 + 540 - 600 = day*1440 - 60. End = day*1440 + 1260 - 600 = day*1440 + 660.
+    expect(result[0]).toEqual([0, 660]); // Mon, clamped
+    expect(result[1]).toEqual([1380, 2100]); // Tue-1h
+    expect(result[4]).toEqual([5700, 6420]); // Fri-1h
+  });
+
+  test('UTC00:00 produces 9am-9pm Mon-Fri exactly', () => {
+    const result = generateDefaultAvailability('UTC00:00');
+    expect(result).toEqual([
+      dayInterval(0, 9, 21),
+      dayInterval(1, 9, 21),
+      dayInterval(2, 9, 21),
+      dayInterval(3, 9, 21),
+      dayInterval(4, 9, 21),
+    ]);
+  });
+
+  test('IANA timezone names still work as fallback', () => {
+    // Just check it doesn't throw and returns 5 weekday intervals.
+    const result = generateDefaultAvailability('Europe/London');
+    expect(result).toHaveLength(5);
   });
 });
 
