@@ -718,15 +718,16 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
       };
 
       if (isLastCycle) {
-        // Full cascade: >=50% -> >=1 unit -> expanded 50% -> expanded 1 unit
+        // Full cascade: >=50% -> >=1 unit -> expanded 50% -> expanded 1 unit.
+        // Facilitators always require full overlap — no allowance outside availability.
         tryCreateGroups({
           [participantType.name]: halfMeeting,
-          [facilitatorType.name]: halfMeeting,
+          [facilitatorType.name]: lengthOfMeetingInUnits,
         });
 
         tryCreateGroups({
           [participantType.name]: 1,
-          [facilitatorType.name]: halfMeeting,
+          [facilitatorType.name]: lengthOfMeetingInUnits,
         });
 
         // Expanded availability
@@ -744,7 +745,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
         tryCreateGroups(
           {
             [participantType.name]: halfMeeting,
-            [facilitatorType.name]: halfMeeting,
+            [facilitatorType.name]: lengthOfMeetingInUnits,
           },
           availabilityOverride,
         );
@@ -752,20 +753,21 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
         tryCreateGroups(
           {
             [participantType.name]: 1,
-            [facilitatorType.name]: halfMeeting,
+            [facilitatorType.name]: lengthOfMeetingInUnits,
           },
           availabilityOverride,
         );
       } else {
-        // Non-last cycle: >=50% overlap first, then >=1 unit if more groups still needed
+        // Non-last cycle: >=50% overlap first, then >=1 unit if more groups still needed.
+        // Facilitators always require full overlap — no allowance outside availability.
         tryCreateGroups({
           [participantType.name]: halfMeeting,
-          [facilitatorType.name]: halfMeeting,
+          [facilitatorType.name]: lengthOfMeetingInUnits,
         });
 
         tryCreateGroups({
           [participantType.name]: 1,
-          [facilitatorType.name]: halfMeeting,
+          [facilitatorType.name]: lengthOfMeetingInUnits,
         });
       }
 
@@ -853,13 +855,18 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
           continue;
         }
 
-        binaries.push(varName);
-
         // Compute fit score with rank-distance awareness
         const timeUnit = cohort.startTime / MINUTES_IN_UNIT;
         const overlapOriginal = getOverlapUnits(person.timeAvUnits, timeUnit, lengthOfMeetingInUnits);
         const expandedUnits = expandedAvByPerson.get(person.id) ?? person.timeAvUnits;
         const overlapExpanded = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
+
+        // Facilitators require full overlap with their stated availability — no allowances.
+        if (personType.name === 'Facilitator' && overlapOriginal < lengthOfMeetingInUnits) {
+          continue;
+        }
+
+        binaries.push(varName);
 
         const majorityRank = cohort.majorityRank ?? 0;
         const personRank = person.rank ?? 999;
@@ -1243,6 +1250,9 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
         const expandedUnits = toTimeAvUnits(expanded);
         const overlapExp = getOverlapUnits(expandedUnits, timeUnit, lengthOfMeetingInUnits);
 
+        // Facilitators require full overlap with their stated availability — no allowances.
+        if (pt.name === facilitatorType.name && overlapOrig < lengthOfMeetingInUnits) continue;
+
         // Grey cap check: if person would be grey, check existing grey count
         if (overlapOrig < 1 && overlapExp < 1 && pt.name !== facilitatorType.name) {
           const existingGrey = countExistingGrey(cohort, personById, participantType.name, lengthOfMeetingInUnits);
@@ -1362,13 +1372,14 @@ function spreadGroupsAcrossDays(
         if (targetDays.length === 0) continue;
 
         // Get all members and their current tiers
-        const members: { id: string; person: Person; currentTier: 1 | 2 | 3 }[] = [];
+        const members: { id: string; person: Person; currentTier: 1 | 2 | 3; isFacilitator: boolean }[] = [];
         for (const ptName of Object.keys(cohort.people)) {
+          const isFacilitator = ptName !== participantTypeName;
           for (const pid of cohort.people[ptName]!) {
             const person = personById[pid];
             if (!person) continue;
             const currentTier = cohort.personTiers?.[pid] ?? 1;
-            members.push({ id: pid, person, currentTier });
+            members.push({ id: pid, person, currentTier, isFacilitator });
           }
         }
 
@@ -1388,12 +1399,15 @@ function spreadGroupsAcrossDays(
             let drops = 0;
             let totalOverlap = 0;
 
-            for (const { person, currentTier } of members) {
+            for (const { person, currentTier, isFacilitator } of members) {
               if (hasBlockedConflict(person, t, lengthOfMeetingInUnits)) { valid = false; break; }
 
               const overlap = getOverlapUnits(person.timeAvUnits, t, lengthOfMeetingInUnits);
               const newTier = computeTier(overlap, lengthOfMeetingInUnits);
               totalOverlap += overlap;
+
+              // Facilitators require full overlap with their stated availability — no allowances.
+              if (isFacilitator && overlap < lengthOfMeetingInUnits) { valid = false; break; }
 
               if (newTier > currentTier) {
                 // Tier dropped (higher number = worse)
