@@ -398,7 +398,7 @@ const AlgorithmPage = () => {
               let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
               let blockedTimes: Interval[] | undefined;
 
-              // For facilitators, subtract blocked times from other active rounds
+              // For facilitators, fetch blocked times from other active rounds
               if (isFacilitator && emailFieldId) {
                 const facilitatorEmail = record.getCellValueAsString(emailFieldId);
                 if (facilitatorEmail) {
@@ -409,7 +409,6 @@ const AlgorithmPage = () => {
                     ...(targetRoundDates && { targetRoundDates }),
                     isCurrentRunIntensive: isIntensive,
                   });
-                  timeAvMins = subtractIntervals(timeAvMins, blockedTimes);
                 }
               }
 
@@ -418,6 +417,13 @@ const AlgorithmPage = () => {
               // then collapse everything to Monday
               if (isIntensive) {
                 timeAvMins = collapseAvailabilityToMonday(expandAvailability(timeAvMins));
+              }
+
+              // Subtract blocked times after the expand/collapse so an existing
+              // block on one day isn't restored by replicating another day's
+              // availability at the same time-of-day onto Monday.
+              if (blockedTimes && blockedTimes.length > 0) {
+                timeAvMins = subtractIntervals(timeAvMins, blockedTimes);
               }
 
               const timezone = personType.timezoneField

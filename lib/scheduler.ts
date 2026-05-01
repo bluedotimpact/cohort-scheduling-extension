@@ -39,6 +39,15 @@ export interface Cohort {
 
 const getCohortCount = (t: number): string => `cc_${t}`;
 
+/** True if a candidate meeting [t, t + meetingLengthUnits) overlaps any of the person's
+ *  blockedTimes. blockedTimes are in weekly minutes; t is in 30-min units. */
+function hasBlockedConflict(person: Person, t: number, meetingLengthUnits: number): boolean {
+  if (!person.blockedTimes || person.blockedTimes.length === 0) return false;
+  const startMins = t * MINUTES_IN_UNIT;
+  const endMins = (t + meetingLengthUnits) * MINUTES_IN_UNIT;
+  return person.blockedTimes.some(([bStart, bEnd]) => startMins < bEnd && bStart < endMins);
+}
+
 /** Phase 1: Original LP solver — extracted from the previous solve() */
 async function solvePhase1(
   { lengthOfMeetingMins, personTypes }: SchedulerInput,
@@ -291,6 +300,7 @@ function findBestTimeSlot(
       const threshold = overlapThresholdByType[pt.name] ?? 1;
 
       const eligible = people.filter(p => {
+        if (hasBlockedConflict(p, t, meetingLengthUnits)) return false;
         const overlap = getOverlapUnits(p.timeAvUnits, t, meetingLengthUnits);
         return overlap >= threshold;
       });
@@ -666,6 +676,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
           // Assign facilitators directly to the new cohort
           const availFacs = unassignedByType[facilitatorType.name] ?? [];
           const eligibleFacs = availFacs.filter(f => {
+            if (hasBlockedConflict(f, bestTime!, lengthOfMeetingInUnits)) return false;
             const overlap = getOverlapUnits(f.timeAvUnits, bestTime!, lengthOfMeetingInUnits);
             return overlap >= overlapThresholdByType[facilitatorType.name]!;
           });
@@ -832,6 +843,13 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
         // Using coef=0 is insufficient because the LP solver can still set
         // a zero-coefficient variable to 1 when it's indifferent.
         if (blockedCohortIndices.has(ci) || isPersonBlockedFromCohort?.(person, ci)) {
+          continue;
+        }
+
+        // Hard-block: skip this cohort entirely if its time conflicts with the
+        // person's blockedTimes (e.g. facilitator already booked in another round).
+        const cohortTimeUnit = cohort.startTime / MINUTES_IN_UNIT;
+        if (hasBlockedConflict(person, cohortTimeUnit, lengthOfMeetingInUnits)) {
           continue;
         }
 
@@ -1186,6 +1204,12 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
 
       for (let ci = 0; ci < allCohorts.length; ci++) {
         const cohort = allCohorts[ci]!;
+
+        // Hard-block: skip cohorts whose time conflicts with the person's blockedTimes
+        // (e.g. facilitator already booked in another round at this time).
+        const cohortTimeUnit = cohort.startTime / MINUTES_IN_UNIT;
+        if (hasBlockedConflict(person, cohortTimeUnit, lengthOfMeetingInUnits)) continue;
+
         const currentCount = (cohort.people[pt.name] ?? []).length;
         const isOverfill = currentCount >= pt.max;
 
@@ -1360,21 +1384,12 @@ function spreadGroupsAcrossDays(
           );
 
           for (const t of candidateSlots) {
-            const candidateStartMins = t * MINUTES_IN_UNIT;
-            const candidateEndMins = (t + lengthOfMeetingInUnits) * MINUTES_IN_UNIT;
-
             let valid = true;
             let drops = 0;
             let totalOverlap = 0;
 
             for (const { person, currentTier } of members) {
-              // Check facilitator blocked times
-              if (person.blockedTimes) {
-                const conflicts = person.blockedTimes.some(
-                  ([bStart, bEnd]) => candidateStartMins < bEnd && bStart < candidateEndMins
-                );
-                if (conflicts) { valid = false; break; }
-              }
+              if (hasBlockedConflict(person, t, lengthOfMeetingInUnits)) { valid = false; break; }
 
               const overlap = getOverlapUnits(person.timeAvUnits, t, lengthOfMeetingInUnits);
               const newTier = computeTier(overlap, lengthOfMeetingInUnits);
