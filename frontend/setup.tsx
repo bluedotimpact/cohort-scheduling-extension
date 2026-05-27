@@ -410,6 +410,9 @@ const SetupPage: React.FC<{ onGoToAlgo?: (() => void) | undefined }> = ({ onGoTo
       <div className="space-y-3">
         <div className="border border-blue-200 bg-blue-50 rounded p-3">
           <Heading>Setup for this round</Heading>
+          <Text className="text-slate-600 mb-2">
+            Matches participants into cohorts based on availability, prioritising full overlap and keeping same-type people together.
+          </Text>
           <div className="grid sm:grid-cols-2 gap-1">
             <FormField label="Meeting length">
               <FixedNumberInput
