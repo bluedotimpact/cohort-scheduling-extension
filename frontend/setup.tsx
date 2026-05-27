@@ -341,7 +341,7 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
   );
 };
 
-const SetupPage = () => {
+const SetupPage: React.FC<{ onGoToAlgo?: (() => void) | undefined }> = ({ onGoToAlgo }) => {
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
   const path = ["presets", selectedPreset];
@@ -388,11 +388,28 @@ const SetupPage = () => {
         personType.cohortsTableField
     ));
 
+  const advancedConfigured = cohortsTableConfigured && typesOfPeopleConfigured;
+
+  const participantEntry = useMemo(() => {
+    const entries = Object.entries(personTypes || {}) as [string, PersonType][];
+    return entries.find(([, pt]) => pt.name?.toLowerCase().includes("participant"));
+  }, [personTypes]);
+  const participantId = participantEntry?.[0];
+  const participantType = participantEntry?.[1];
+
+  const updateParticipant = (next: PersonType) => {
+    if (!participantId) return;
+    setPersonTypes({
+      ...(personTypes as { [key: string]: PersonType }),
+      [participantId]: next,
+    });
+  };
+
   return (
     <>
       <div className="space-y-3">
-        <div>
-          <Heading>General settings</Heading>
+        <div className="border border-blue-200 bg-blue-50 rounded p-3">
+          <Heading>Setup for this round</Heading>
           <div className="grid sm:grid-cols-2 gap-1">
             <FormField label="Meeting length">
               <FixedNumberInput
@@ -423,8 +440,84 @@ const SetupPage = () => {
                 render={(ms) => "Week of " + new Date(ms).toLocaleDateString()}
               />
             </FormField>
+            {participantType && (
+              <FormField label="Participants per cohort">
+                <div className="flex w-full space-x-3">
+                  <div>
+                    <span className="pr-1">Min: </span>
+                    <Input
+                      type="number"
+                      width="80px"
+                      value={participantType.howManyTypePerCohort?.[0].toString() ?? ""}
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value);
+                        if (participantType.howManyTypePerCohort?.[1] && n > participantType.howManyTypePerCohort[1]) {
+                          return;
+                        }
+                        updateParticipant({
+                          ...participantType,
+                          howManyTypePerCohort: [
+                            n,
+                            participantType.howManyTypePerCohort?.[1] ?? n,
+                          ],
+                        });
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <span className="pr-1">Max: </span>
+                    <Input
+                      type="number"
+                      width="80px"
+                      value={participantType.howManyTypePerCohort?.[1].toString() ?? ""}
+                      onChange={(e) => {
+                        const n = parseInt(e.target.value);
+                        if (participantType.howManyTypePerCohort?.[0] && n < participantType.howManyTypePerCohort[0]) {
+                          return;
+                        }
+                        updateParticipant({
+                          ...participantType,
+                          howManyTypePerCohort: [
+                            participantType.howManyTypePerCohort?.[0] ?? n,
+                            n,
+                          ],
+                        });
+                      }}
+                    />
+                  </div>
+                </div>
+              </FormField>
+            )}
           </div>
+          {onGoToAlgo && (
+            <div className="flex justify-end pt-3">
+              <Button variant="primary" onClick={onGoToAlgo}>
+                Next
+              </Button>
+            </div>
+          )}
         </div>
+        <Disclosure defaultOpen={!advancedConfigured}>
+          {({ open: advancedOpen }) => (
+            <div>
+              <Disclosure.Button className="flex space-x-2 items-center w-full">
+                <Icon name="caret" className={"transition-all " + (advancedOpen ? "" : "-rotate-90")} size={12} />
+                <Heading>Advanced configuration</Heading>
+                {!advancedConfigured && (
+                  <span className="text-xs text-gray-500">
+                    Please finish configuring
+                  </span>
+                )}
+              </Disclosure.Button>
+              <Transition
+                enter="transition duration-100 ease-out"
+                enterFrom="transform opacity-0"
+                enterTo="transform opacity-100"
+                leave="transition duration-75 ease-out"
+                leaveFrom="transform opacity-100"
+                leaveTo="transform opacity-0"
+              >
+                <Disclosure.Panel className="pl-4 space-y-3">
         <Disclosure defaultOpen={!cohortsTableConfigured}>
           {({ open }) => (
             <div>
@@ -591,6 +684,11 @@ const SetupPage = () => {
             </Button>
           </div>
         </div>
+                </Disclosure.Panel>
+              </Transition>
+            </div>
+          )}
+        </Disclosure>
       </div>
     </>
   );

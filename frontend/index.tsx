@@ -172,9 +172,12 @@ function App() {
 
   const showDeletePreset = Object.keys(globalConfig.get("presets") as Record<string, Preset>).length > 1
 
+  const [selectedTab, setSelectedTab] = useState(0);
+  const goToAlgo = isConfigured ? () => setSelectedTab(1) : undefined;
+
   return (
     <main className="bg-slate-50 min-h-screen">
-      <Tab.Group>
+      <Tab.Group selectedIndex={selectedTab} onChange={setSelectedTab}>
         <Tab.List className="p-1 w-auto flex gap-2 sm:gap-4 overflow-x-auto items-center justify-between bg-slate-500">
           <div className="flex items-center">
             <MyTabLink icon="settings" label="Setup" />
@@ -217,7 +220,7 @@ function App() {
         </Tab.List>
         <Tab.Panels className="p-4 sm:p-6">
           <Tab.Panel>
-            <SetupPage />
+            <SetupPage onGoToAlgo={goToAlgo} />
           </Tab.Panel>
           {isConfigured && (
             <>
