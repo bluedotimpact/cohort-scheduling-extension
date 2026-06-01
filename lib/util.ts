@@ -162,6 +162,60 @@ export function expandAvailabilityToDays(timeAvMins: Interval[], numDays: number
   return expanded;
 }
 
+/** Weekday indices (Mon=0 … Sun=6) covered by the inclusive [start, end] date span. */
+export function weekdaysInRange(start: Date, end: Date): Set<number> {
+  const days = new Set<number>();
+  const d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()));
+  const last = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+  for (let i = 0; i < 366 && d.getTime() <= last; i++) {
+    days.add((d.getUTCDay() + 6) % 7); // JS Sun=0..Sat=6  ->  Mon=0..Sun=6
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (days.size === 7) break;
+  }
+  return days;
+}
+
+/**
+ * Collapse availability onto a single day for intensive scheduling. Keeps a time-of-day
+ * only if it falls on >= minDays distinct days that are in relevantDays (the round's
+ * meeting weekdays, Mon=0..Sun=6). Days outside relevantDays are ignored entirely.
+ *
+ * Replaces collapseAvailabilityToMonday(expandAvailability(...)) for intensives: the old
+ * pipeline replicated a single day's window across the whole week, overstating who can
+ * attend a course that meets at the same time every day. minDays=1 with all 7 relevant
+ * days reproduces that old blanket behaviour.
+ */
+export function collapseIntensiveAvailability(
+  timeAvMins: Interval[],
+  relevantDays: Set<number>,
+  minDays = 2,
+): Interval[] {
+  const MINUTES_IN_DAY = 24 * 60;
+  const daysByMinute = new Map<number, Set<number>>(); // minute-of-day -> set of day indices
+  for (const [start, end] of timeAvMins) {
+    const day = Math.floor(start / MINUTES_IN_DAY);
+    if (!relevantDays.has(day)) continue; // ignore non-meeting days (e.g. Sunday)
+    const sod = start % MINUTES_IN_DAY;
+    const eod = Math.min(sod + (end - start), MINUTES_IN_DAY); // clamp at midnight, as extractTimeOfDayWindows does
+    for (let m = sod; m < eod; m++) {
+      let s = daysByMinute.get(m);
+      if (!s) { s = new Set(); daysByMinute.set(m, s); }
+      s.add(day);
+    }
+  }
+  const kept = [...daysByMinute.entries()]
+    .filter(([, days]) => days.size >= minDays)
+    .map(([m]) => m)
+    .sort((a, b) => a - b);
+  const merged: Interval[] = [];
+  for (const m of kept) {
+    const last = merged[merged.length - 1];
+    if (last && m === last[1]) merged[merged.length - 1] = [last[0], m + 1] as Interval;
+    else merged.push([m, m + 1] as Interval);
+  }
+  return merged;
+}
+
 /**
  * Collapses availability from all days onto Monday by extracting time-of-day windows
  * and merging them onto day 0. Used for intensive courses where scheduling is per-day.

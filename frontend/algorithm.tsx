@@ -14,7 +14,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Interval, parseIntervals, subtractIntervals, toDate } from "weekly-availabilities";
 import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
 import { Cohort, SchedulerInput, PersonType as SchedulerPersonType, solve } from "../lib/scheduler";
-import { collapseAvailabilityToMonday, expandAvailability, generateDefaultAvailability, generateDefaultAvailabilityAllDays, toTimeAvUnits, wait } from "../lib/util";
+import { collapseAvailabilityToMonday, collapseIntensiveAvailability, generateDefaultAvailability, generateDefaultAvailabilityAllDays, toTimeAvUnits, wait, weekdaysInRange } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
 import { CollapsibleSection } from "./components/CollapsibleSection";
 import { Preset } from "./index";
@@ -412,11 +412,16 @@ const AlgorithmPage = () => {
                 }
               }
 
-              // For intensive courses, expand availability to all 7 days first
-              // (so weekend-only availability gets replicated to weekdays),
-              // then collapse everything to Monday
+              // For intensive courses, collapse onto a single day, keeping a time-of-day
+              // only if it recurs on >=2 of the round's meeting days (so a one-off slot
+              // doesn't count as availability for a course that meets at the same time
+              // every day). Days outside the round's first->last discussion span (e.g.
+              // Sunday) are ignored.
               if (isIntensive) {
-                timeAvMins = collapseAvailabilityToMonday(expandAvailability(timeAvMins));
+                const relevantDays = targetRoundDates
+                  ? weekdaysInRange(targetRoundDates.start, targetRoundDates.end)
+                  : new Set([0, 1, 2, 3, 4, 5, 6]);
+                timeAvMins = collapseIntensiveAvailability(timeAvMins, relevantDays);
               }
 
               // Subtract blocked times after the expand/collapse so an existing

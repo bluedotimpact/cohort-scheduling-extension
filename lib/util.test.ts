@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { Interval, WeeklyTime } from 'weekly-availabilities';
 import { MINUTES_IN_UNIT } from './constants';
-import { collapseAvailabilityToMonday, expandAvailabilityToDays, generateDefaultAvailability, toTimeAvUnits } from './util';
+import { collapseAvailabilityToMonday, collapseIntensiveAvailability, expandAvailabilityToDays, generateDefaultAvailability, toTimeAvUnits, weekdaysInRange } from './util';
 
 /** Monday at given hour:minute in weekly minutes */
 function mon(hour: number, minute = 0): WeeklyTime {
@@ -82,6 +82,65 @@ describe('collapseAvailabilityToMonday', () => {
 
   test('handles empty input', () => {
     expect(collapseAvailabilityToMonday([])).toEqual([]);
+  });
+});
+
+describe('weekdaysInRange', () => {
+  test('Mon->Sat span yields Mon-Sat (no Sunday)', () => {
+    // 2026-06-08 is a Monday, 2026-06-13 a Saturday (Jun W24 intensive)
+    const result = weekdaysInRange(new Date(Date.UTC(2026, 5, 8)), new Date(Date.UTC(2026, 5, 13)));
+    expect([...result].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  test('single day yields just that weekday', () => {
+    const result = weekdaysInRange(new Date(Date.UTC(2026, 5, 13)), new Date(Date.UTC(2026, 5, 13)));
+    expect([...result]).toEqual([5]); // Saturday
+  });
+
+  test('span over a week yields all 7 weekdays', () => {
+    const result = weekdaysInRange(new Date(Date.UTC(2026, 5, 8)), new Date(Date.UTC(2026, 5, 20)));
+    expect(result.size).toBe(7);
+  });
+});
+
+describe('collapseIntensiveAvailability', () => {
+  const monToSat = new Set([0, 1, 2, 3, 4, 5]);
+
+  test('drops a time-of-day that occurs on only one day', () => {
+    expect(collapseIntensiveAvailability([dayInterval(0, 13, 14)], monToSat)).toEqual([]);
+  });
+
+  test('keeps a time-of-day that recurs on two days, collapsed to Monday', () => {
+    const intervals: Interval[] = [dayInterval(0, 13, 14), dayInterval(2, 13, 14)];
+    expect(collapseIntensiveAvailability(intervals, monToSat)).toEqual([dayInterval(0, 13, 14)]);
+  });
+
+  test('ignores days outside relevantDays (Sunday does not count toward the 2)', () => {
+    const intervals: Interval[] = [dayInterval(0, 13, 14), dayInterval(6, 13, 14)]; // Mon + Sun
+    expect(collapseIntensiveAvailability(intervals, monToSat)).toEqual([]);
+  });
+
+  test('Saturday counts when it is in relevantDays', () => {
+    const intervals: Interval[] = [dayInterval(4, 13, 14), dayInterval(5, 13, 14)]; // Fri + Sat
+    expect(collapseIntensiveAvailability(intervals, monToSat)).toEqual([dayInterval(0, 13, 14)]);
+  });
+
+  test('keeps only the minutes that recur on >=2 days', () => {
+    const intervals: Interval[] = [dayInterval(0, 13, 17), dayInterval(2, 13, 15)];
+    expect(collapseIntensiveAvailability(intervals, monToSat)).toEqual([dayInterval(0, 13, 15)]);
+  });
+
+  test('minDays=1 over all days reproduces blanket collapse', () => {
+    const allDays = new Set([0, 1, 2, 3, 4, 5, 6]);
+    const intervals: Interval[] = [dayInterval(0, 9, 12), dayInterval(5, 15, 17)];
+    expect(collapseIntensiveAvailability(intervals, allDays, 1)).toEqual([
+      dayInterval(0, 9, 12),
+      dayInterval(0, 15, 17),
+    ]);
+  });
+
+  test('handles empty input', () => {
+    expect(collapseIntensiveAvailability([], monToSat)).toEqual([]);
   });
 });
 
