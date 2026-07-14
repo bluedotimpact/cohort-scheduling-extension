@@ -235,9 +235,15 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
                     <Input
                       type="number"
                       width="80px"
-                      value={personType.howManyTypePerCohort?.[0].toString() ?? ''}
+                      value={personType.howManyTypePerCohort?.[0]?.toString() ?? ''}
                       onChange={(e) => {
                         const n = parseInt(e.target.value);
+
+                        // ignore empty/invalid input — writing NaN into
+                        // globalConfig persists as null and crashes the extension
+                        if (!Number.isFinite(n)) {
+                          return;
+                        }
 
                         // min shouldn't be greater than max
                         if (personType.howManyTypePerCohort?.[1] && n > personType.howManyTypePerCohort[1]) {
@@ -260,9 +266,15 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
                     <Input
                       type="number"
                       width="80px"
-                      value={personType.howManyTypePerCohort?.[1].toString() ?? ''}
+                      value={personType.howManyTypePerCohort?.[1]?.toString() ?? ''}
                       onChange={(e) => {
                         const n = parseInt(e.target.value);
+
+                        // ignore empty/invalid input — writing NaN into
+                        // globalConfig persists as null and crashes the extension
+                        if (!Number.isFinite(n)) {
+                          return;
+                        }
 
                         // max shouldn't be less than min
                         if (personType.howManyTypePerCohort?.[0] && n < personType.howManyTypePerCohort[0]) {
@@ -383,7 +395,8 @@ const SetupPage: React.FC<{ onGoToAlgo?: (() => void) | undefined }> = ({ onGoTo
         personType.name &&
         personType.sourceTable &&
         personType.timeAvField &&
-        personType.howManyTypePerCohort &&
+        Number.isFinite(personType.howManyTypePerCohort?.[0]) &&
+        Number.isFinite(personType.howManyTypePerCohort?.[1]) &&
         personType.howManyCohortsPerType &&
         personType.cohortsTableField
     ));
@@ -451,9 +464,12 @@ const SetupPage: React.FC<{ onGoToAlgo?: (() => void) | undefined }> = ({ onGoTo
                     <Input
                       type="number"
                       width="80px"
-                      value={participantType.howManyTypePerCohort?.[0].toString() ?? ""}
+                      value={participantType.howManyTypePerCohort?.[0]?.toString() ?? ""}
                       onChange={(e) => {
                         const n = parseInt(e.target.value);
+                        if (!Number.isFinite(n)) {
+                          return;
+                        }
                         if (participantType.howManyTypePerCohort?.[1] && n > participantType.howManyTypePerCohort[1]) {
                           return;
                         }
@@ -472,9 +488,12 @@ const SetupPage: React.FC<{ onGoToAlgo?: (() => void) | undefined }> = ({ onGoTo
                     <Input
                       type="number"
                       width="80px"
-                      value={participantType.howManyTypePerCohort?.[1].toString() ?? ""}
+                      value={participantType.howManyTypePerCohort?.[1]?.toString() ?? ""}
                       onChange={(e) => {
                         const n = parseInt(e.target.value);
+                        if (!Number.isFinite(n)) {
+                          return;
+                        }
                         if (participantType.howManyTypePerCohort?.[0] && n < participantType.howManyTypePerCohort[0]) {
                           return;
                         }

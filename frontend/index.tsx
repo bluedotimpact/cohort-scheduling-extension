@@ -164,7 +164,8 @@ function App() {
         personType.name &&
         personType.sourceTable &&
         personType.timeAvField &&
-        personType.howManyTypePerCohort &&
+        Number.isFinite(personType.howManyTypePerCohort?.[0]) &&
+        Number.isFinite(personType.howManyTypePerCohort?.[1]) &&
         personType.howManyCohortsPerType &&
         personType.iterationField &&
         personType.cohortsTableField
