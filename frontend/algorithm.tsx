@@ -375,6 +375,14 @@ const AlgorithmPage = () => {
             throw new Error(`Missing timeAvField for personType ${personType.name}`)
           }
 
+          if (!personType.timezoneField) {
+            throw new Error(`Missing required timezone field for personType ${personType.name} — set it in Setup`)
+          }
+
+          if (!personType.humanOpinionField) {
+            throw new Error(`Missing required human opinion field for personType ${personType.name} — set it in Setup`)
+          }
+
           const fieldsToFetch = [
             table.primaryField.id,
             personType.timeAvField,

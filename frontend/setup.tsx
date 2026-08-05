@@ -6,7 +6,6 @@ import {
   Heading,
   Icon,
   Input,
-  SelectSynced,
   Switch,
   TablePickerSynced,
   Text,
@@ -50,14 +49,32 @@ export const canonicalPersonTypeName = (name: string | undefined): string | unde
   return PERSON_TYPE_NAMES.find((n) => n.toLowerCase() === cleaned);
 };
 
-const createPersonType = (): PersonType => ({
-  name: "",
+const createPersonType = (name: PersonType["name"]): PersonType => ({
+  name,
   sourceTable: "",
   sourceView: "",
   timeAvField: "",
   howManyTypePerCohort: [3, 4],
   howManyCohortsPerType: 1,
 });
+
+/** Required config per person type — used for the setup alert and the configured check.
+ *  The iteration field is only load-bearing for Facilitator (round/intensity detection). */
+const missingRequiredFields = (personType: PersonType): string[] => {
+  const missing: string[] = [];
+  if (!personType.sourceTable) missing.push("Source table");
+  if (!personType.timeAvField) missing.push("Time availability field");
+  if (personType.name === "Facilitator" && !personType.iterationField) missing.push("Iteration field");
+  if (!personType.timezoneField) missing.push("Timezone field");
+  if (!personType.humanOpinionField) missing.push("Human opinion field");
+  if (
+    !Number.isFinite(personType.howManyTypePerCohort?.[0]) ||
+    !Number.isFinite(personType.howManyTypePerCohort?.[1])
+  ) missing.push("Min/max per cohort");
+  if (!personType.howManyCohortsPerType) missing.push("Cohorts per person");
+  if (!personType.cohortsTableField) missing.push("Cohort link field");
+  return missing;
+};
 
 const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
   const globalConfig = useGlobalConfig();
@@ -102,7 +119,7 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
     globalConfig.get(["presets", selectedPreset, "cohortsTable"]) as string
   );
 
-  const [isTrashDialogOpen, setIsTrashDialogOpen] = useState(false);
+  const missingFields = useMemo(() => missingRequiredFields(personType), [personType]);
 
   return (
     <>
@@ -115,6 +132,11 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
             {sourceTable && (
               <div className="text-[11px] text-slate-400">
                 {sourceTable.name} {sourceView && `(${sourceView?.name})`}
+              </div>
+            )}
+            {missingFields.length > 0 && (
+              <div className="text-[11px] text-red-600 font-medium">
+                ⚠ Missing: {missingFields.join(", ")}
               </div>
             )}
           </div>
@@ -137,54 +159,14 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
             onClick={() => setIsEditDialogOpen(true)}
             aria-label="Edit person type"
           />
-          <Button
-            className="px-2 text-gray-600 hover:bg-slate-200 hover:text-gray-800"
-            icon="trash"
-            onClick={() => setIsTrashDialogOpen(true)}
-            aria-label="Delete person type"
-          />
         </div>
       </div>
-      {isTrashDialogOpen && (
-        <Dialog onClose={() => setIsTrashDialogOpen(false)} width="350px">
-          <Text>Are you sure you want to delete this person type?</Text>
-          <div className="w-full flex justify-end">
-            <Button
-              onClick={() => {
-                setIsTrashDialogOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                await globalConfig.setAsync(path, undefined);
-                setIsTrashDialogOpen(false);
-                setIsEditDialogOpen(false);
-              }}
-            >
-              Delete
-            </Button>
-          </div>
-        </Dialog>
-      )}
       {isEditDialogOpen && (
         <Dialog onClose={() => setIsEditDialogOpen(false)}>
           <Dialog.CloseButton />
-          <Heading>Edit person type</Heading>
+          <Heading>Edit person type — {personType.name}</Heading>
 
           <div className="divide-y">
-            <div className="py-2 w-1/2">
-              <FormField label="Name">
-                <SelectSynced
-                  options={[
-                    { value: "", label: "Pick a type...", disabled: true },
-                    ...PERSON_TYPE_NAMES.map((n) => ({ value: n, label: n })),
-                  ]}
-                  globalConfigKey={[...path, "name"]}
-                />
-              </FormField>
-            </div>
             <div className="py-2 flex w-full">
               <div className="w-1/2 pr-4">
                 <FormField label="Source table">
@@ -223,28 +205,14 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
                       globalConfigKey={[...path, "iterationField"]}
                     />
                   </FormField>
-                  <FormField label="Cohort full overlap field (optional)">
-                    <FieldPickerSynced
-                      table={sourceTable}
-                      allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
-                      globalConfigKey={[...path, "cohortOverlapFullField"]}
-                    />
-                  </FormField>
-                  <FormField label="Cohort partial overlap field (optional)">
-                    <FieldPickerSynced
-                      table={sourceTable}
-                      allowedTypes={[FieldType.MULTIPLE_RECORD_LINKS]}
-                      globalConfigKey={[...path, "cohortOverlapPartialField"]}
-                    />
-                  </FormField>
-                  <FormField label="Timezone field (optional)">
+                  <FormField label="Timezone field">
                     <FieldPickerSynced
                       table={sourceTable}
                       allowedTypes={[FieldType.SINGLE_LINE_TEXT, FieldType.SINGLE_SELECT]}
                       globalConfigKey={[...path, "timezoneField"]}
                     />
                   </FormField>
-                  <FormField label="Human opinion field (optional)">
+                  <FormField label="Human opinion field">
                     <FieldPickerSynced
                       table={sourceTable}
                       allowedTypes={[FieldType.SINGLE_SELECT]}
@@ -416,17 +384,15 @@ const SetupPage: React.FC<{ onGoToAlgo?: (() => void) | undefined }> = ({ onGoTo
     preset.cohortsTableEndDateField &&
     preset.cohortsIterationField;
 
+  const missingTypeNames = PERSON_TYPE_NAMES.filter(
+    (n) => !Object.values(preset.personTypes).some((pt) => canonicalPersonTypeName(pt.name) === n)
+  );
+
   const typesOfPeopleConfigured =
-    Object.keys(preset.personTypes).length > 0 &&
-    Object.values(preset.personTypes).every((personType) => (
-        personType.name &&
-        personType.sourceTable &&
-        personType.timeAvField &&
-        Number.isFinite(personType.howManyTypePerCohort?.[0]) &&
-        Number.isFinite(personType.howManyTypePerCohort?.[1]) &&
-        personType.howManyCohortsPerType &&
-        personType.cohortsTableField
-    ));
+    missingTypeNames.length === 0 &&
+    Object.values(preset.personTypes).every(
+      (personType) => personType.name && missingRequiredFields(personType).length === 0
+    );
 
   const advancedConfigured = cohortsTableConfigured && typesOfPeopleConfigured;
 
@@ -708,29 +674,38 @@ const SetupPage: React.FC<{ onGoToAlgo?: (() => void) | undefined }> = ({ onGoTo
           <div className="flex space-x-2 items-center">
             <Heading>Person types</Heading>
             <div className="text-xs text-gray-500">
-              {Object.keys(preset.personTypes).length === 0
-                ? "Please add at least one type"
+              {missingTypeNames.length > 0
+                ? `Missing person type${missingTypeNames.length > 1 ? "s" : ""}: ${missingTypeNames.join(", ")}`
                 : !typesOfPeopleConfigured &&
-                  "Please finish configuring the types"}
+                  "Some required fields are missing — see the warnings below"}
             </div>
           </div>
+          {!typesOfPeopleConfigured && (
+            <div className="my-1 px-3 py-2 rounded border bg-red-50 border-red-300 text-red-800 text-sm">
+              The scheduler needs both person types fully configured before it can run correctly.
+              Fix the ⚠ warnings below.
+            </div>
+          )}
           <div className="pl-1 space-y-1">
             {Object.keys(personTypes || {}).map((id, index) => (
               <PersonTypeComp key={index} personTypeId={id} />
             ))}
-            <Button
-              icon="plus"
-              onClick={() => {
-                setPersonTypes({
-                  ...((personTypes as {
-                    [key: string]: PersonType;
-                  }) || {}),
-                  [newUID()]: createPersonType(),
-                });
-              }}
-            >
-              Add new person type
-            </Button>
+            {missingTypeNames.map((name) => (
+              <Button
+                key={name}
+                icon="plus"
+                onClick={() => {
+                  setPersonTypes({
+                    ...((personTypes as {
+                      [key: string]: PersonType;
+                    }) || {}),
+                    [newUID()]: createPersonType(name),
+                  });
+                }}
+              >
+                Add {name} type
+              </Button>
+            ))}
           </div>
         </div>
                 </Disclosure.Panel>
