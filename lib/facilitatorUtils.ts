@@ -174,5 +174,5 @@ export async function getTargetRoundDates(
   const isIntensive = intensity === 'Intensive';
   const numUnits = preset.roundsNumUnitsField ? parseInt(record.getCellValueAsString(preset.roundsNumUnitsField)) || 0 : 0;
 
-  return { start, end, isIntensive, numUnits };
+  return { start, end, isIntensive, numUnits, name: record.name, intensityKnown: !!preset.roundsIntensityField };
 }

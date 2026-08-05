@@ -6,7 +6,7 @@ import {
   Heading,
   Icon,
   Input,
-  InputSynced,
+  SelectSynced,
   Switch,
   TablePickerSynced,
   Text,
@@ -17,7 +17,7 @@ import {
 } from "@airtable/blocks/ui";
 import { FieldType } from "@airtable/blocks/models";
 import { Disclosure, Transition } from "@headlessui/react";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Preset } from ".";
 import { MS_IN_WEEK, MINUTES_IN_UNIT } from "../lib/constants";
 import { renderDuration } from "../lib/renderDuration";
@@ -37,6 +37,17 @@ export type PersonType = {
   howManyTypePerCohort?: [number, number];
   howManyCohortsPerType?: number | string;
   cohortsTableField?: string;
+};
+
+/** The algorithm matches person types by these exact names (see lib/scheduler.ts and
+ *  frontend/algorithm.tsx) — a renamed type silently disables intensity detection and
+ *  all facilitator-specific rules, so the UI only offers these fixed options. */
+export const PERSON_TYPE_NAMES = ["Participant", "Facilitator"] as const;
+
+export const canonicalPersonTypeName = (name: string | undefined): string | undefined => {
+  if (!name) return undefined;
+  const cleaned = name.trim().toLowerCase().replace(/s$/, "");
+  return PERSON_TYPE_NAMES.find((n) => n.toLowerCase() === cleaned);
 };
 
 const createPersonType = (): PersonType => ({
@@ -63,6 +74,16 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
     () => personType.name.toLowerCase(),
     [personType]
   );
+
+  // Self-heal presets saved before the name was locked down: rewrite case/plural
+  // variants ("facilitator", "Participants", ...) to the canonical name the
+  // algorithm matches on.
+  useEffect(() => {
+    const canonical = canonicalPersonTypeName(personType.name);
+    if (canonical && canonical !== personType.name) {
+      setPersonType({ ...personType, name: canonical });
+    }
+  }, [personType, setPersonType]);
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(
     personType.name === "" ? true : false
@@ -155,7 +176,13 @@ const PersonTypeComp: React.FC<{ personTypeId: string }> = (props) => {
           <div className="divide-y">
             <div className="py-2 w-1/2">
               <FormField label="Name">
-                <InputSynced globalConfigKey={[...path, "name"]}></InputSynced>
+                <SelectSynced
+                  options={[
+                    { value: "", label: "Pick a type...", disabled: true },
+                    ...PERSON_TYPE_NAMES.map((n) => ({ value: n, label: n })),
+                  ]}
+                  globalConfigKey={[...path, "name"]}
+                />
               </FormField>
             </div>
             <div className="py-2 flex w-full">

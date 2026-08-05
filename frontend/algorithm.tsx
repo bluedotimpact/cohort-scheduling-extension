@@ -328,12 +328,23 @@ const AlgorithmPage = () => {
 
   const [grandInput, setGrandInput] = useState<SchedulerInput | undefined>();
   const [parsingError, setParsingError] = useState<Error | undefined>();
+  const [roundResolution, setRoundResolution] = useState<{
+    detected: boolean;
+    isIntensive: boolean;
+    roundName?: string;
+    reason?: string;
+  } | undefined>();
 
   useEffect(() => {
     const generateGrandInput = async () => {
       try {
         let targetRoundDates: { start: Date; end: Date } | null = null;
         let isIntensive = false;
+        let resolution = {
+          detected: false,
+          isIntensive: false,
+          reason: "No person type named 'Facilitator' is configured, so the target round can't be identified.",
+        } as { detected: boolean; isIntensive: boolean; roundName?: string; reason?: string };
         const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!);
         const emailFieldId = getEmailFieldId(cohortsTable!, preset);
 
@@ -379,15 +390,33 @@ const AlgorithmPage = () => {
           })).records
 
           // Get target round from Facilitator's information
-          if (isFacilitator && personType.iterationField && peopleRecords.length > 0 && !targetRoundDates && cohortsTable) {
-            const firstPersonRound = peopleRecords[0]?.getCellValue(personType.iterationField) as Array<{ id: string }> | null;
-            const targetRoundId = firstPersonRound?.[0]?.id;
+          if (isFacilitator && !targetRoundDates) {
+            if (!personType.iterationField) {
+              resolution = { detected: false, isIntensive: false, reason: "The Facilitator person type has no round (iteration) field configured in Setup." };
+            } else if (peopleRecords.length === 0) {
+              resolution = { detected: false, isIntensive: false, reason: "The Facilitator source view has no records." };
+            } else if (!cohortsTable) {
+              resolution = { detected: false, isIntensive: false, reason: "No cohorts table is configured in Setup." };
+            } else {
+              const firstPersonRound = peopleRecords[0]?.getCellValue(personType.iterationField) as Array<{ id: string }> | null;
+              const targetRoundId = firstPersonRound?.[0]?.id;
 
-            if (targetRoundId) {
-              const roundInfo = await getTargetRoundDates(base, targetRoundId, cohortsTable, preset);
-              if (roundInfo) {
-                targetRoundDates = { start: roundInfo.start, end: roundInfo.end };
-                isIntensive = roundInfo.isIntensive;
+              if (!targetRoundId) {
+                resolution = { detected: false, isIntensive: false, reason: "The first facilitator record has no linked round." };
+              } else {
+                const roundInfo = await getTargetRoundDates(base, targetRoundId, cohortsTable, preset);
+                if (!roundInfo) {
+                  resolution = { detected: false, isIntensive: false, reason: "Could not read the target round's start/end dates — check the round fields in Setup." };
+                } else {
+                  targetRoundDates = { start: roundInfo.start, end: roundInfo.end };
+                  isIntensive = roundInfo.isIntensive;
+                  resolution = {
+                    detected: true,
+                    isIntensive,
+                    roundName: roundInfo.name,
+                    ...(roundInfo.intensityKnown ? {} : { reason: "No round intensity field is configured in Setup, so the round is assumed to be Part-time." }),
+                  };
+                }
               }
             }
           }
@@ -500,6 +529,7 @@ const AlgorithmPage = () => {
           personTypes,
           isIntensive,
         });
+        setRoundResolution(resolution);
       } catch (err) {
         console.error(err);
         setParsingError(err instanceof Error ? err : new Error(String(err)));
@@ -587,6 +617,33 @@ const AlgorithmPage = () => {
           {validationIssues.length > 0 && (
             <ValidationWarning issues={validationIssues} />
           )}
+          <div
+            className={`mb-3 px-3 py-2 rounded border text-sm ${
+              roundResolution?.detected
+                ? "bg-blue-50 border-blue-200 text-blue-900"
+                : "bg-amber-50 border-amber-300 text-amber-900"
+            }`}
+          >
+            {roundResolution?.detected ? (
+              <>
+                Will schedule as{" "}
+                <span className="font-semibold">
+                  {grandInput.isIntensive
+                    ? "Intensive — all groups on Monday"
+                    : "Part-time — groups spread across the week"}
+                </span>
+                {roundResolution.roundName && <> (round: {roundResolution.roundName})</>}
+                {roundResolution.reason && <>. {roundResolution.reason}</>}
+              </>
+            ) : (
+              <>
+                Will schedule as{" "}
+                <span className="font-semibold">Part-time — groups spread across the week</span>{" "}
+                because the target round could not be determined.{" "}
+                {roundResolution?.reason}
+              </>
+            )}
+          </div>
           <div>
             <Heading>Input description</Heading>
             {grandInput.personTypes.map((personType) => {
