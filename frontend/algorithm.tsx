@@ -624,25 +624,23 @@ const AlgorithmPage = () => {
                 : "bg-amber-50 border-amber-300 text-amber-900"
             }`}
           >
-            {roundResolution?.detected ? (
-              <>
-                Will schedule as{" "}
-                <span className="font-semibold">
-                  {grandInput.isIntensive
-                    ? "Intensive — all groups on Monday"
-                    : "Part-time — groups spread across the week"}
-                </span>
-                {roundResolution.roundName && <> (round: {roundResolution.roundName})</>}
-                {roundResolution.reason && <>. {roundResolution.reason}</>}
-              </>
-            ) : (
-              <>
-                Will schedule as{" "}
-                <span className="font-semibold">Part-time — groups spread across the week</span>{" "}
-                because the target round could not be determined.{" "}
-                {roundResolution?.reason}
-              </>
-            )}
+            <div>
+              <span className="font-semibold">Round:</span>{" "}
+              {roundResolution?.detected && roundResolution.roundName
+                ? roundResolution.roundName
+                : "could not be determined"}
+            </div>
+            <div>
+              <span className="font-semibold">Intensity:</span>{" "}
+              {grandInput.isIntensive ? "Intensive" : "Part-time"}
+              {!roundResolution?.detected && " (default)"}
+            </div>
+            <div className="opacity-80">
+              {grandInput.isIntensive
+                ? "All groups will be scheduled on Monday."
+                : "Groups will be spread across the week."}
+              {roundResolution?.reason && <> {roundResolution.reason}</>}
+            </div>
           </div>
           <div>
             <Heading>Input description</Heading>
