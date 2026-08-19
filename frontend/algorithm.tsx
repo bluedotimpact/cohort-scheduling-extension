@@ -78,9 +78,11 @@ const ValidationWarning: React.FC<{ issues: ValidationIssue[] }> = ({ issues }) 
 interface SolutionProps {
   solution: Cohort[],
   personTypes: SchedulerPersonType[],
+  roundId?: string | undefined,
+  roundName?: string | undefined,
 }
 
-const Solution = ({ solution, personTypes }: SolutionProps) => {
+const Solution = ({ solution, personTypes, roundId, roundName }: SolutionProps) => {
   const base = useBase();
   const globalConfig = useGlobalConfig();
   const selectedPreset = globalConfig.get("selectedPreset") as string;
@@ -201,6 +203,11 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
         <div className="flex justify-between">
           <div className="text-xs text-gray-400">
             Click a cohort to view its meeting time and attendee&apos;s availability.
+            {!roundId && (
+              <div className="text-amber-700">
+                Save is disabled because the target round could not be determined — see the round banner above.
+              </div>
+            )}
           </div>
           <Button
             //@ts-ignore
@@ -208,6 +215,7 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
             icon="link"
             onClick={() => setAcceptDialogOpen(true)}
             variant="danger"
+            disabled={!roundId}
           >
             Save
           </Button>
@@ -257,7 +265,8 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
             {!saving ? (
               <div className="flex h-full flex-col justify-between">
                 <Heading>Save records?</Heading>
-                {solution.length} records will be created in the cohorts table.
+                {solution.length} records will be created in the cohorts table
+                {roundName ? `, linked to ${roundName}` : ""}.
                 Are you sure you want to continue?
                 <div className="flex w-full justify-end space-x-2">
                   <Button onClick={() => setAcceptDialogOpen(false)}>
@@ -268,9 +277,11 @@ const Solution = ({ solution, personTypes }: SolutionProps) => {
                     type="asdf"
                     variant="danger"
                     onClick={async () => {
+                      if (!roundId) throw new Error('Cannot save: the target round could not be determined');
                       setSaving(true);
                       const records = solution.map((cohort) => {
                         const fields: Record<FieldId, unknown> = {
+                          [preset.cohortsIterationField!]: [{ id: roundId }],
                           [preset.cohortsTableStartDateField!]: toDate(
                             cohort.startTime,
                             new Date(preset.firstWeek)
@@ -331,6 +342,7 @@ const AlgorithmPage = () => {
   const [roundResolution, setRoundResolution] = useState<{
     detected: boolean;
     isIntensive: boolean;
+    roundId?: string;
     roundName?: string;
     reason?: string;
   } | undefined>();
@@ -344,7 +356,7 @@ const AlgorithmPage = () => {
           detected: false,
           isIntensive: false,
           reason: "No person type named 'Facilitator' is configured, so the target round can't be identified.",
-        } as { detected: boolean; isIntensive: boolean; roundName?: string; reason?: string };
+        } as { detected: boolean; isIntensive: boolean; roundId?: string; roundName?: string; reason?: string };
         const cohortsTable = base.getTableByIdIfExists(preset.cohortsTable!);
         const emailFieldId = getEmailFieldId(cohortsTable!, preset);
 
@@ -421,6 +433,7 @@ const AlgorithmPage = () => {
                   resolution = {
                     detected: true,
                     isIntensive,
+                    roundId: targetRoundId,
                     roundName: roundInfo.name,
                     ...(roundInfo.intensityKnown ? {} : { reason: "No round intensity field is configured in Setup, so the round is assumed to be Part-time." }),
                   };
@@ -711,6 +724,8 @@ const AlgorithmPage = () => {
               <Solution
                 solution={solution}
                 personTypes={grandInput.personTypes}
+                roundId={roundResolution?.roundId}
+                roundName={roundResolution?.roundName}
               />
             )
           )}
