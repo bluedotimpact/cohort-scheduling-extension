@@ -142,6 +142,31 @@ describe('collapseIntensiveAvailability', () => {
   test('handles empty input', () => {
     expect(collapseIntensiveAvailability([], monToSat)).toEqual([]);
   });
+
+  test('a single interval spanning the whole week counts on every day (Aline, TAIS Oct W41)', () => {
+    // "M00:00 U17:30" — free continuously from Monday to Sunday afternoon
+    const intervals: Interval[] = [[0, 6 * MINUTES_IN_DAY + 17 * 60 + 30] as Interval];
+    expect(collapseIntensiveAvailability(intervals, monToSat)).toEqual([dayInterval(0, 0, 24)]);
+  });
+
+  test('cross-midnight intervals keep their post-midnight portion (Chris, TAIS Oct W41)', () => {
+    // Nightly 23:00-03:00: "M00:00 M03:00, M23:00 T03:00, ..., S23:00 U03:00"
+    const intervals: Interval[] = [[0, 180] as Interval];
+    for (let day = 0; day < 6; day++) {
+      intervals.push([day * MINUTES_IN_DAY + 23 * 60, (day + 1) * MINUTES_IN_DAY + 3 * 60] as Interval);
+    }
+    // 00:00-03:00 recurs Mon-Sat, 23:00-24:00 recurs Mon-Sat
+    expect(collapseIntensiveAvailability(intervals, monToSat)).toEqual([
+      dayInterval(0, 0, 3),
+      dayInterval(0, 23, 24),
+    ]);
+  });
+
+  test('post-midnight portion landing on a non-meeting day is ignored', () => {
+    // Sat 23:00 - Sun 03:00 only: Sunday tail ignored, Sat 23:00-24:00 occurs once -> dropped
+    const intervals: Interval[] = [[5 * MINUTES_IN_DAY + 23 * 60, 6 * MINUTES_IN_DAY + 3 * 60] as Interval];
+    expect(collapseIntensiveAvailability(intervals, monToSat)).toEqual([]);
+  });
 });
 
 describe('generateDefaultAvailability', () => {

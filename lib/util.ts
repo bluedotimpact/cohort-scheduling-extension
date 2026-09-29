@@ -193,14 +193,23 @@ export function collapseIntensiveAvailability(
   const MINUTES_IN_DAY = 24 * 60;
   const daysByMinute = new Map<number, Set<number>>(); // minute-of-day -> set of day indices
   for (const [start, end] of timeAvMins) {
-    const day = Math.floor(start / MINUTES_IN_DAY);
-    if (!relevantDays.has(day)) continue; // ignore non-meeting days (e.g. Sunday)
-    const sod = start % MINUTES_IN_DAY;
-    const eod = Math.min(sod + (end - start), MINUTES_IN_DAY); // clamp at midnight, as extractTimeOfDayWindows does
-    for (let m = sod; m < eod; m++) {
-      let s = daysByMinute.get(m);
-      if (!s) { s = new Set(); daysByMinute.set(m, s); }
-      s.add(day);
+    // Split the interval at day boundaries so an interval spanning midnight (or
+    // several days, e.g. "M00:00 U17:30") counts on every day it covers, not
+    // just its start day. Without the split, "free all week" collapses to
+    // "free on Monday only" and is then dropped by the minDays rule.
+    for (let segStart: number = start; segStart < end; ) {
+      const day = Math.floor(segStart / MINUTES_IN_DAY);
+      const segEnd = Math.min(end, (day + 1) * MINUTES_IN_DAY);
+      if (relevantDays.has(day)) { // ignore non-meeting days (e.g. Sunday)
+        const sod = segStart % MINUTES_IN_DAY;
+        const eod = sod + (segEnd - segStart);
+        for (let m = sod; m < eod; m++) {
+          let s = daysByMinute.get(m);
+          if (!s) { s = new Set(); daysByMinute.set(m, s); }
+          s.add(day);
+        }
+      }
+      segStart = segEnd;
     }
   }
   const kept = [...daysByMinute.entries()]
