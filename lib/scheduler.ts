@@ -383,7 +383,12 @@ function computeNewGroupsNeeded(
   const extraGroup = remainder >= MIN_FILL_THRESHOLD ? 1 : 0;
   const maxByParticipants = numFullGroups + extraGroup;
 
-  const maxByFacilitators = Math.floor(unassignedFacilitators.length / facilitatorType.min);
+  // Sum of remaining per-facilitator capacity (howManyCohorts here is already the
+  // remaining count): one facilitator can host several groups at different times.
+  // Exact for min=1; for min>1 this can overestimate, and Phase 3 assignment plus
+  // the post-Phase-4 cull enforce the real limit.
+  const totalFacCapacity = unassignedFacilitators.reduce((acc, f) => acc + f.howManyCohorts, 0);
+  const maxByFacilitators = Math.floor(totalFacCapacity / facilitatorType.min);
   return Math.min(maxByParticipants, maxByFacilitators);
 }
 
@@ -479,8 +484,49 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
   const allCohorts: Cohort[] = [];
   const assignedIds = new Set<string>();
 
-  // Track which facilitators are assigned
-  const assignedFacIds = new Set<string>();
+  // Track facilitator assignments across cycles as counts against howManyCohorts,
+  // plus the times of their assigned groups. A facilitator with capacity for
+  // several groups keeps taking groups in later cycles/phases; the recorded
+  // times prevent double-booking them into two groups at once.
+  const facAssignedCounts = new Map<string, number>();
+  const facAssignedIntervals = new Map<string, Interval[]>();
+  const facRemaining = (f: Person): number => f.howManyCohorts - (facAssignedCounts.get(f.id) ?? 0);
+  const recordFacAssignment = (facId: string, cohort: Cohort) => {
+    facAssignedCounts.set(facId, (facAssignedCounts.get(facId) ?? 0) + 1);
+    const intervals = facAssignedIntervals.get(facId) ?? [];
+    intervals.push([cohort.startTime, cohort.endTime] as Interval);
+    facAssignedIntervals.set(facId, intervals);
+  };
+  const removeFacAssignment = (facId: string, cohort: Cohort) => {
+    facAssignedCounts.set(facId, Math.max(0, (facAssignedCounts.get(facId) ?? 0) - 1));
+    const intervals = facAssignedIntervals.get(facId) ?? [];
+    const i = intervals.findIndex(([s, e]) => s === cohort.startTime && e === cohort.endTime);
+    if (i >= 0) intervals.splice(i, 1);
+  };
+  /** Clone with own assigned group times added to blockedTimes, for phases guarded by hasBlockedConflict. */
+  const facWithOwnBlocks = (f: Person): Person => {
+    const own = facAssignedIntervals.get(f.id);
+    if (!own || own.length === 0) return f;
+    return { ...f, blockedTimes: [...(f.blockedTimes ?? []), ...own] };
+  };
+  /** Clone for Phase 1 LP runs: capacity reduced to what's left and own group times
+   *  cut from timeAvUnits (solvePhase1 reads timeAvUnits only, not blockedTimes). */
+  const facForPhase1 = (f: Person): Person => {
+    const own = facAssignedIntervals.get(f.id) ?? [];
+    if (own.length === 0) return f;
+    let units = f.timeAvUnits;
+    for (const [s, e] of own) {
+      const bs = Math.floor(s / MINUTES_IN_UNIT);
+      const be = Math.ceil(e / MINUTES_IN_UNIT);
+      units = units.flatMap(([us, ue]): [number, number][] => {
+        const kept: [number, number][] = [];
+        if (us < bs) kept.push([us, Math.min(ue, bs)]);
+        if (ue > be) kept.push([Math.max(us, be), ue]);
+        return kept.filter(([a, b]) => a < b);
+      });
+    }
+    return { ...f, timeAvUnits: units, howManyCohorts: facRemaining(f) };
+  };
 
   // Track Phase 3 cohorts created during neutral+ cycles (rank 0 should not be assigned to these)
   const neutralCyclePhase3Indices = new Set<number>();
@@ -512,8 +558,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
       rankLevel,
       isLastCycle,
       sortedRanks,
-      facilitatorType.people,
-      assignedFacIds,
+      facilitatorType.people.filter(f => facRemaining(f) > 0),
     );
 
     for (const facilitatorGroup of facilitatorGroups) {
@@ -521,8 +566,9 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
       const unassignedPool = participantPool.filter(p => !assignedIds.has(p.id));
       if (unassignedPool.length === 0) break;
 
-      // Filter facilitator group to only unassigned facilitators
-      const availableFacs = facilitatorGroup.filter(f => !assignedFacIds.has(f.id));
+      // Facilitators with capacity left, offered at their remaining capacity with
+      // already-assigned group times cut out
+      const availableFacs = facilitatorGroup.filter(f => facRemaining(f) > 0).map(facForPhase1);
       if (availableFacs.length < facilitatorType.min) continue;
 
       // ── Phase 1: Run LP with this pool + facilitator group ──
@@ -542,9 +588,10 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
         for (const ptName of Object.keys(cohort.people)) {
           for (const personId of cohort.people[ptName]!) {
             cohort.personTiers[personId] = 1;
-            assignedIds.add(personId);
             if (ptName === facilitatorType.name) {
-              assignedFacIds.add(personId);
+              recordFacAssignment(personId, cohort);
+            } else {
+              assignedIds.add(personId);
             }
           }
         }
@@ -560,7 +607,10 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
 
     // ── Phase 2 + 3: Check capacity and create additional groups if needed ──
     const unassignedInPool = participantPool.filter(p => !assignedIds.has(p.id));
-    const unassignedFacs = facilitatorType.people.filter(f => !assignedFacIds.has(f.id));
+    // Facilitators with capacity left, at their remaining capacity
+    const unassignedFacs = facilitatorType.people
+      .filter(f => facRemaining(f) > 0)
+      .map(f => ({ ...f, howManyCohorts: facRemaining(f) }));
     const newGroupsNeeded = computeNewGroupsNeeded(
       unassignedInPool.length,
       allCohorts,
@@ -573,16 +623,17 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
 
     if (newGroupsNeeded > 0) {
       const newCohorts: Cohort[] = [];
-      const phase3AssignedFacIds = new Set<string>();
 
       const halfMeeting = Math.ceil(lengthOfMeetingInUnits * 0.5);
 
-      // Helper to get currently unassigned people for Phase 3
+      // Helper to get currently unassigned people for Phase 3. Facilitators with
+      // capacity left are included; their own group times ride along as blockedTimes
+      // so hasBlockedConflict prevents double-booking.
       const getUnassignedByType = (): Record<string, Person[]> => ({
         [participantType.name]: unassignedInPool.filter(p => !assignedIds.has(p.id)),
-        [facilitatorType.name]: facilitatorType.people.filter(
-          f => !assignedFacIds.has(f.id) && !phase3AssignedFacIds.has(f.id)
-        ),
+        [facilitatorType.name]: facilitatorType.people
+          .filter(f => facRemaining(f) > 0)
+          .map(facWithOwnBlocks),
       });
 
       // Check if all eligible participants at a time slot are grey (no overlap)
@@ -685,8 +736,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
             const fac = eligibleFacs[j]!;
             newCohort.people[facilitatorType.name]!.push(fac.id);
             newCohort.personTiers![fac.id] = 1;
-            phase3AssignedFacIds.add(fac.id);
-            assignedFacIds.add(fac.id);
+            recordFacAssignment(fac.id, newCohort);
           }
 
           // Assign participants greedily to the new cohort (best overlap first)
@@ -1064,7 +1114,11 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
         const cohort = allCohorts[cohortIndex]!;
         if (!cohort.people[pt.name]) cohort.people[pt.name] = [];
         cohort.people[pt.name]!.push(personId);
-        assignedIds.add(personId);
+        if (pt.name === facilitatorType!.name) {
+          recordFacAssignment(personId, cohort);
+        } else {
+          assignedIds.add(personId);
+        }
 
         // Compute tier
         if (!cohort.personTiers) cohort.personTiers = {};
@@ -1105,12 +1159,14 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
     return count;
   }
 
-  // Collect all unassigned people
+  // Collect all unassigned people. Facilitators count as unassigned while they
+  // have capacity left; their own group times ride along as blockedTimes.
   const allUnassigned: { person: Person; personType: PersonType }[] = [];
   for (const pt of personTypes) {
+    const isFacType = pt.name === facilitatorType.name;
     for (const p of pt.people) {
-      if (!assignedIds.has(p.id)) {
-        allUnassigned.push({ person: p, personType: pt });
+      if (isFacType ? facRemaining(p) > 0 : !assignedIds.has(p.id)) {
+        allUnassigned.push({ person: isFacType ? facWithOwnBlocks(p) : p, personType: pt });
       }
     }
   }
@@ -1142,8 +1198,15 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
 
 
 
-    // Phase 4b: Assign neutral people, blocking cohorts that have any strong yes (rank 0) members
-    const neutralPeople = allUnassigned.filter(({ person }) => person.rank === neutralRank && !assignedIds.has(person.id));
+    // Phase 4b: Assign neutral people, blocking cohorts that have any strong yes (rank 0) members.
+    // Rebuilt from the source lists (not allUnassigned) so facilitator capacity and
+    // own-group blocks reflect any Phase 4a assignments.
+    const neutralPeople = personTypes.flatMap((pt) => {
+      const isFacType = pt.name === facilitatorType.name;
+      return pt.people
+        .filter(p => p.rank === neutralRank && (isFacType ? facRemaining(p) > 0 : !assignedIds.has(p.id)))
+        .map(p => ({ person: isFacType ? facWithOwnBlocks(p) : p, personType: pt }));
+    });
     const blockedCohorts = new Set<number>();
     for (let ci = 0; ci < allCohorts.length; ci++) {
       const cohort = allCohorts[ci]!;
@@ -1178,8 +1241,11 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
       // Invalid group — un-assign all members so they can be redistributed
       for (const ptName of Object.keys(cohort.people)) {
         for (const pid of cohort.people[ptName]!) {
-          assignedIds.delete(pid);
-          assignedFacIds.delete(pid);
+          if (ptName === facilitatorType.name) {
+            removeFacAssignment(pid, cohort);
+          } else {
+            assignedIds.delete(pid);
+          }
         }
       }
     } else {
@@ -1193,9 +1259,10 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
   // Overfill rules: a group can go +1 over max, but no more than half the groups can be overfilled.
   const stillUnassigned: { person: Person; personType: PersonType }[] = [];
   for (const pt of personTypes) {
+    const isFacType = pt.name === facilitatorType.name;
     for (const p of pt.people) {
-      if (!assignedIds.has(p.id)) {
-        stillUnassigned.push({ person: p, personType: pt });
+      if (isFacType ? facRemaining(p) > 0 : !assignedIds.has(p.id)) {
+        stillUnassigned.push({ person: isFacType ? facWithOwnBlocks(p) : p, personType: pt });
       }
     }
   }
@@ -1273,8 +1340,8 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
         if (!cohort.people[pt.name]) cohort.people[pt.name] = [];
         const wasAtMax = (cohort.people[pt.name]!.length >= pt.max);
         cohort.people[pt.name]!.push(person.id);
-        assignedIds.add(person.id);
-        if (pt.name === facilitatorType.name) assignedFacIds.add(person.id);
+        if (pt.name === facilitatorType.name) recordFacAssignment(person.id, cohort);
+        else assignedIds.add(person.id);
         if (wasAtMax) overfilledGroups.add(bestCohortIdx);
 
         // Compute tier
@@ -1299,7 +1366,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
 
   // ── Spread groups across days (skip for intensive courses — all groups stay on Monday) ──
   if (!isIntensive) {
-    spreadGroupsAcrossDays(allCohorts, personById, lengthOfMeetingInUnits, allTimeSlots, participantType.name);
+    spreadGroupsAcrossDays(allCohorts, personById, lengthOfMeetingInUnits, allTimeSlots, participantType.name, facAssignedIntervals);
   }
 
   return allCohorts;
@@ -1324,6 +1391,7 @@ function spreadGroupsAcrossDays(
   lengthOfMeetingInUnits: number,
   allTimeSlots: number[],
   participantTypeName: string,
+  facAssignedIntervals: Map<string, Interval[]>,
 ): void {
   if (allCohorts.length <= 1) return;
 
@@ -1399,8 +1467,15 @@ function spreadGroupsAcrossDays(
             let drops = 0;
             let totalOverlap = 0;
 
-            for (const { person, currentTier, isFacilitator } of members) {
-              if (hasBlockedConflict(person, t, lengthOfMeetingInUnits)) { valid = false; break; }
+            for (const { id, person, currentTier, isFacilitator } of members) {
+              // A facilitator's OTHER groups (not the one being moved) also block the slot
+              const otherGroupTimes = isFacilitator
+                ? (facAssignedIntervals.get(id) ?? []).filter(([s, e]) => !(s === cohort.startTime && e === cohort.endTime))
+                : [];
+              const checkPerson = otherGroupTimes.length > 0
+                ? { ...person, blockedTimes: [...(person.blockedTimes ?? []), ...otherGroupTimes] }
+                : person;
+              if (hasBlockedConflict(checkPerson, t, lengthOfMeetingInUnits)) { valid = false; break; }
 
               const overlap = getOverlapUnits(person.timeAvUnits, t, lengthOfMeetingInUnits);
               const newTier = computeTier(overlap, lengthOfMeetingInUnits);
@@ -1437,6 +1512,19 @@ function spreadGroupsAcrossDays(
         }
 
         if (bestSlot) {
+          // Update facilitator assignment records before mutating the cohort times
+          for (const { id, isFacilitator } of members) {
+            if (!isFacilitator) continue;
+            const intervals = facAssignedIntervals.get(id) ?? [];
+            const idx = intervals.findIndex(([s, e]) => s === cohort.startTime && e === cohort.endTime);
+            if (idx >= 0) {
+              intervals[idx] = [
+                bestSlot.time * MINUTES_IN_UNIT,
+                (bestSlot.time + lengthOfMeetingInUnits) * MINUTES_IN_UNIT,
+              ] as Interval;
+            }
+          }
+
           // Move the cohort
           cohort.startTime = (bestSlot.time * MINUTES_IN_UNIT) as typeof cohort.startTime;
           cohort.endTime = ((bestSlot.time + lengthOfMeetingInUnits) * MINUTES_IN_UNIT) as typeof cohort.endTime;
@@ -1466,10 +1554,8 @@ function getFacilitatorGroupsForCycle(
   rankLevel: number,
   isLastCycle: boolean,
   sortedRanks: number[],
-  allFacilitators: Person[],
-  assignedFacIds: Set<string>,
+  availableFacs: Person[],
 ): Person[][] {
-  const availableFacs = allFacilitators.filter(f => !assignedFacIds.has(f.id));
 
   if (isLastCycle) {
     // Last cycle: try all remaining facilitators at once
