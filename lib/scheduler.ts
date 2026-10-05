@@ -1274,7 +1274,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
 
     for (const { person, personType: pt } of stillUnassigned) {
       let bestCohortIdx = -1;
-      let bestOverlap = -1;
+      let bestOverlap = -Infinity;
 
       for (let ci = 0; ci < allCohorts.length; ci++) {
         const cohort = allCohorts[ci]!;
