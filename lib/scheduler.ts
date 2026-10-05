@@ -39,6 +39,16 @@ export interface Cohort {
 
 const getCohortCount = (t: number): string => `cc_${t}`;
 
+/** Solver stopping rules, shared by the Phase 1 and Phase 4 LP runs.
+ *  MAX_SOLVE_SECONDS caps one solver call (was 30s; on a 290-person round two calls
+ *  burned the full 30s each, 60s of a 61s run). MIP_GAP stops a call once its best
+ *  answer is within this fraction of the solver's theoretical ceiling, which is
+ *  usually unreachable anyway - the Weak-yes call had its final answer at ~11s
+ *  and spent 19s failing to prove nothing better existed. */
+const MAX_SOLVE_SECONDS = 10;
+const MIP_GAP = 0.1;
+const solveTimeLimit = (personCount: number): number => Math.min(Math.max(personCount * 0.5, 5), MAX_SOLVE_SECONDS);
+
 /** True if a candidate meeting [t, t + meetingLengthUnits) overlaps any of the person's
  *  blockedTimes. blockedTimes are in weekly minutes; t is in 30-min units. */
 function hasBlockedConflict(person: Person, t: number, meetingLengthUnits: number): boolean {
@@ -56,12 +66,13 @@ async function solvePhase1(
   const lengthOfMeetingInUnits = lengthOfMeetingMins / MINUTES_IN_UNIT;
 
   const personCount = personTypes.map(p => p.people.length).reduce((acc, cur) => acc + cur, 0);
-  const timeLimitSeconds = Math.min(Math.max(personCount * 0.5, 5), 30);
+  const timeLimitSeconds = solveTimeLimit(personCount);
 
   const options: Options = {
     msglev: glpk.GLP_MSG_ALL,
     presol: true,
     tmlim: timeLimitSeconds,
+    mipgap: MIP_GAP,
     cb: {
       call: (progress) => {
         console.log("progress", progress);
@@ -1074,7 +1085,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
     }
 
     const pCount = personTypes.map(p => p.people.length).reduce((acc, cur) => acc + cur, 0);
-    const tmlim = Math.min(Math.max(pCount * 0.5, 5), 30);
+    const tmlim = solveTimeLimit(pCount);
 
     try {
       const res = await glpk.solve(
@@ -1092,6 +1103,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
           msglev: glpk.GLP_MSG_ALL,
           presol: true,
           tmlim,
+          mipgap: MIP_GAP,
           cb: { call: (progress) => console.log(`${passName} progress`, progress), each: 1 },
         },
       );
