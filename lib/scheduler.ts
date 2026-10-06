@@ -1257,6 +1257,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
 
   // Step B: Greedy fill for still-unassigned people (with overfill support)
   // Overfill rules: a group can go +1 over max, but no more than half the groups can be overfilled.
+  // Overfill applies to participants only: a group never gets a second facilitator.
   const stillUnassigned: { person: Person; personType: PersonType }[] = [];
   for (const pt of personTypes) {
     const isFacType = pt.name === facilitatorType.name;
@@ -1290,6 +1291,7 @@ export async function solve({ lengthOfMeetingMins, personTypes, isIntensive }: S
         // Check capacity: allow +1 overfill if this group isn't already overfilled
         // and we haven't hit the max number of overfilled groups
         if (isOverfill) {
+          if (pt.name === facilitatorType.name) continue; // facilitators never overfill
           if (currentCount >= pt.max + 1) continue; // already overfilled
           if (overfilledGroups.has(ci)) continue; // already counted as overfilled
           if (overfilledGroups.size >= maxOverfilledGroups) continue; // too many overfilled

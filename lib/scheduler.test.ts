@@ -95,3 +95,32 @@ describe('solve: facilitator capacity across rank cycles', () => {
     expect(assigned.size).toBe(8);
   });
 });
+
+describe('solve: greedy fill never overfills facilitators', () => {
+  test('a spare facilitator is left unused rather than added as a second facilitator', async () => {
+    // Two groups' worth of participants in disjoint windows and three facilitators, one of
+    // them free in both windows. Whichever facilitator the LP phases leave over reaches the
+    // greedy fill with capacity to spare. Participant-style +1 overfill would push them into
+    // an existing group as a second facilitator (half the groups may overfill, so one of two
+    // groups is eligible). Facilitators must never overfill: the spare one stays unused.
+    const facs = [
+      person('facA', [[mon(9), mon(11)] as Interval], 1),
+      person('facB', [[mon(13), mon(15)] as Interval], 1),
+      person('facC', [[mon(9), mon(15)] as Interval], 1),
+    ];
+    const participants = [
+      ...[1, 2, 3, 4].map((i) => person(`am${i}`, [[mon(9), mon(11)] as Interval], 1)),
+      ...[1, 2, 3, 4].map((i) => person(`pm${i}`, [[mon(13), mon(15)] as Interval], 1)),
+    ];
+    const personTypes: PersonType[] = [
+      { name: 'Participant', min: 3, max: 4, people: participants },
+      { name: 'Facilitator', min: 1, max: 1, people: facs },
+    ];
+    const solution = await solve({ lengthOfMeetingMins: 120, personTypes });
+    expect(solution).not.toBeNull();
+    expect(solution!.length).toBe(2);
+    for (const cohort of solution!) {
+      expect((cohort.people['Facilitator'] ?? []).length).toBe(1);
+    }
+  });
+});
