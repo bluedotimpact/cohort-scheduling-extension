@@ -10,10 +10,7 @@ import { collapseAvailabilityToMonday, dateRangesOverlap, expandAvailabilityToDa
  * Otherwise (for view display), blocks times for all active and future rounds.
  */
 
-const parseEmails = (emails: string) => emails.split(',').map((e) => e.trim().toLowerCase());
-
-/** Each side is a lookup value: emails are comma-separated when a group is co-facilitated */
-export const emailsMatch = (a: string, b: string) => parseEmails(a).some((e) => parseEmails(b).includes(e));
+export const emailsMatch = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export async function getFacilitatorBlockedTimes({
   base,
