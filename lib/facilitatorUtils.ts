@@ -25,7 +25,7 @@ export async function getFacilitatorBlockedTimes({
   targetRoundDates?: { start: Date; end: Date };
   isCurrentRunIntensive?: boolean;
 }): Promise<Interval[]> {
-  if (!facilitatorEmail || !preset.facilitatorEmailLookupField) {
+  if (!facilitatorEmail.trim() || !preset.facilitatorEmailLookupField) {
     return [];
   }
 
