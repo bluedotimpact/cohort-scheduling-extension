@@ -128,6 +128,17 @@ export async function getFacilitatorBlockedTimes({
   return blockedIntervals;
 }
 
+/** Setup fields the facilitator conflict check needs. If any is unset, `getFacilitatorBlockedTimes` returns nothing
+ * and facilitators can be double-booked across rounds. */
+export function getMissingBlockedTimesFields(preset: Preset): string[] {
+  const missing: string[] = [];
+  if (!preset.facilitatorEmailLookupField) missing.push('Facilitator email lookup field');
+  if (!preset.roundsStatusField) missing.push('Round status field');
+  if (!preset.roundsStartDateField) missing.push('Round start date field');
+  if (!preset.roundsEndDateField) missing.push('Round end date field');
+  return missing;
+}
+
 export function getEmailFieldId(cohortsTable: Table | null, preset: Preset): string | undefined {
   if (!preset.facilitatorEmailLookupField || !cohortsTable) return undefined;
 
