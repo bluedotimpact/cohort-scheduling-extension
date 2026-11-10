@@ -7,8 +7,12 @@ import { collapseAvailabilityToMonday, dateRangesOverlap, expandAvailabilityToDa
  * are already unavailable. This matches by email since facilitators have different record IDs across rounds.
  *
  * If targetRoundDates are provided, only blocks times for rounds that overlap with that date range.
- * Otherwise (for view display), blocks times for all active rounds.
+ * Otherwise (for view display), blocks times for all active and future rounds.
  */
+// 'Future' matters because rounds are usually scheduled before they start: without it, two overlapping rounds
+// scheduled ahead of time don't see each other's groups.
+const BLOCKING_ROUND_STATUSES = ['Active', 'Future'];
+
 export async function getFacilitatorBlockedTimes({
   base,
   facilitatorEmail,
@@ -56,11 +60,10 @@ export async function getFacilitatorBlockedTimes({
     }),
   ]);
 
-  // Build map of active round IDs -> { startDate, endDate, isIntensive, numUnits }
+  // Build map of active and future round IDs -> { startDate, endDate, isIntensive, numUnits }
   const roundInfo = new Map<string, { startDate: Date; endDate: Date; isIntensive: boolean; numUnits: number }>();
   for (const r of roundRecords.records) {
-    const isActive = r.getCellValueAsString(preset.roundsStatusField!) === 'Active';
-    if (!isActive) continue;
+    if (!BLOCKING_ROUND_STATUSES.includes(r.getCellValueAsString(preset.roundsStatusField!))) continue;
     const startDate = new Date(r.getCellValue(preset.roundsStartDateField!) as string);
     const endDate = new Date(r.getCellValue(preset.roundsEndDateField!) as string);
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) continue;
