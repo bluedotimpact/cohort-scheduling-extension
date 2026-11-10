@@ -448,7 +448,7 @@ const AlgorithmPage = () => {
               let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
               let blockedTimes: Interval[] | undefined;
 
-              // For facilitators, fetch blocked times from other active rounds
+              // For facilitators, fetch blocked times from other active and future rounds
               if (isFacilitator && emailFieldId) {
                 const facilitatorEmail = record.getCellValueAsString(emailFieldId);
                 if (facilitatorEmail) {
