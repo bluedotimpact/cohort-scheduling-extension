@@ -12,7 +12,7 @@ import {
 } from "@airtable/blocks/ui";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Interval, parseIntervals, subtractIntervals, toDate } from "weekly-availabilities";
-import { getEmailFieldId, getFacilitatorBlockedTimes, getTargetRoundDates } from "../lib/facilitatorUtils";
+import { getEmailFieldId, getFacilitatorBlockedTimes, getMissingBlockedTimesFields, getTargetRoundDates } from "../lib/facilitatorUtils";
 import { Cohort, SchedulerInput, PersonType as SchedulerPersonType, solve } from "../lib/scheduler";
 import { collapseAvailabilityToMonday, collapseIntensiveAvailability, generateDefaultAvailability, generateDefaultAvailabilityAllDays, toTimeAvUnits, wait, weekdaysInRange } from "../lib/util";
 import { PersonBlob } from "./components/Blobs";
@@ -448,7 +448,7 @@ const AlgorithmPage = () => {
               let timeAvMins = parseIntervals(record.getCellValueAsString(personType.timeAvField!));
               let blockedTimes: Interval[] | undefined;
 
-              // For facilitators, fetch blocked times from other active rounds
+              // For facilitators, fetch blocked times from other active and future rounds
               if (isFacilitator && emailFieldId) {
                 const facilitatorEmail = record.getCellValueAsString(emailFieldId);
                 if (facilitatorEmail) {
@@ -576,6 +576,8 @@ const AlgorithmPage = () => {
     });
   }, [grandInput, preset.personTypes]);
 
+  const missingBlockedTimesFields = getMissingBlockedTimesFields(preset);
+
   const [solution, setSolution] = useState<null | Cohort[]>(null);
   const [error, setError] = useState<null | unknown>(null);
   const [solving, setSolving] = useState<boolean>(false);
@@ -637,6 +639,13 @@ const AlgorithmPage = () => {
         <div>
           {validationIssues.length > 0 && (
             <ValidationWarning issues={validationIssues} />
+          )}
+          {missingBlockedTimesFields.length > 0 && (
+            <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded p-3 mb-4 text-sm">
+              <span className="font-medium">Facilitator conflict check is off.</span>{" "}
+              Facilitators may get a group at a time they already run one in another round. Set in Setup:{" "}
+              {missingBlockedTimesFields.join(", ")}.
+            </div>
           )}
           <div
             className={`mb-3 px-3 py-2 rounded border text-sm ${

@@ -7,8 +7,11 @@ import { collapseAvailabilityToMonday, dateRangesOverlap, expandAvailabilityToDa
  * are already unavailable. This matches by email since facilitators have different record IDs across rounds.
  *
  * If targetRoundDates are provided, only blocks times for rounds that overlap with that date range.
- * Otherwise (for view display), blocks times for all active rounds.
+ * Otherwise (for view display), blocks times for all active and future rounds.
  */
+
+export const emailsMatch = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
 export async function getFacilitatorBlockedTimes({
   base,
   facilitatorEmail,
@@ -22,7 +25,7 @@ export async function getFacilitatorBlockedTimes({
   targetRoundDates?: { start: Date; end: Date };
   isCurrentRunIntensive?: boolean;
 }): Promise<Interval[]> {
-  if (!facilitatorEmail || !preset.facilitatorEmailLookupField) {
+  if (!facilitatorEmail.trim() || !preset.facilitatorEmailLookupField) {
     return [];
   }
 
@@ -56,11 +59,10 @@ export async function getFacilitatorBlockedTimes({
     }),
   ]);
 
-  // Build map of active round IDs -> { startDate, endDate, isIntensive, numUnits }
+  // Build map of active and future round IDs -> { startDate, endDate, isIntensive, numUnits }
   const roundInfo = new Map<string, { startDate: Date; endDate: Date; isIntensive: boolean; numUnits: number }>();
   for (const r of roundRecords.records) {
-    const isActive = r.getCellValueAsString(preset.roundsStatusField!) === 'Active';
-    if (!isActive) continue;
+    if (!['Active', 'Future'].includes(r.getCellValueAsString(preset.roundsStatusField!))) continue;
     const startDate = new Date(r.getCellValue(preset.roundsStartDateField!) as string);
     const endDate = new Date(r.getCellValue(preset.roundsEndDateField!) as string);
     if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) continue;
@@ -76,7 +78,7 @@ export async function getFacilitatorBlockedTimes({
   for (const group of cohortRecords.records) {
     // Check correct facilitator
     const cohortFacilitatorEmail = group.getCellValueAsString(preset.facilitatorEmailLookupField);
-    if (cohortFacilitatorEmail !== facilitatorEmail) continue;
+    if (!emailsMatch(cohortFacilitatorEmail, facilitatorEmail)) continue;
 
     // Get linked round info
     const linkedRound = group.getCellValue(preset.cohortsIterationField!) as Array<{ id: string }> | null;
@@ -121,6 +123,17 @@ export async function getFacilitatorBlockedTimes({
   }
 
   return blockedIntervals;
+}
+
+/** Setup fields the facilitator conflict check needs. If any is unset, `getFacilitatorBlockedTimes` returns nothing
+ * and facilitators can be double-booked across rounds. */
+export function getMissingBlockedTimesFields(preset: Preset): string[] {
+  const missing: string[] = [];
+  if (!preset.facilitatorEmailLookupField) missing.push('Facilitator email lookup field');
+  if (!preset.roundsStatusField) missing.push('Round status field');
+  if (!preset.roundsStartDateField) missing.push('Round start date field');
+  if (!preset.roundsEndDateField) missing.push('Round end date field');
+  return missing;
 }
 
 export function getEmailFieldId(cohortsTable: Table | null, preset: Preset): string | undefined {
