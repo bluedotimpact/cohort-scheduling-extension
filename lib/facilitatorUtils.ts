@@ -10,6 +10,10 @@ import { collapseAvailabilityToMonday, dateRangesOverlap, expandAvailabilityToDa
  * Otherwise (for view display), blocks times for all active and future rounds.
  */
 
+const parseEmails = (emails: string) => emails.split(',').map((e) => e.trim().toLowerCase());
+
+/** Each side is a lookup value: emails are comma-separated when a group is co-facilitated */
+export const emailsMatch = (a: string, b: string) => parseEmails(a).some((e) => parseEmails(b).includes(e));
 
 export async function getFacilitatorBlockedTimes({
   base,
@@ -77,7 +81,7 @@ export async function getFacilitatorBlockedTimes({
   for (const group of cohortRecords.records) {
     // Check correct facilitator
     const cohortFacilitatorEmail = group.getCellValueAsString(preset.facilitatorEmailLookupField);
-    if (cohortFacilitatorEmail !== facilitatorEmail) continue;
+    if (!emailsMatch(cohortFacilitatorEmail, facilitatorEmail)) continue;
 
     // Get linked round info
     const linkedRound = group.getCellValue(preset.cohortsIterationField!) as Array<{ id: string }> | null;
